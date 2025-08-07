@@ -1,0 +1,1 @@
+magnitude_mcp_server_new_tab.js

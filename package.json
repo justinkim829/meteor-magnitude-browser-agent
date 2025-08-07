@@ -1,5 +1,6 @@
 {
   "name": "magnitude",
+  "type": "module",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -37,7 +38,15 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.0.0",
     "@paralleldrive/cuid2": "^2.2.2",
-    "patchright": "^1.52.5"
+    "body-parser": "^2.2.0",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "magnitude-core": "^0.2.23",
+    "patchright": "^1.52.5",
+    "playwright": "^1.54.1",
+    "ws": "^8.16.0",
+    "node-fetch": "^3.3.2"
   }
 }

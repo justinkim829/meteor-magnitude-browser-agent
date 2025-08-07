@@ -1,0 +1,133 @@
+[dotenv@17.2.0] injecting env (0) from .env (tip: ⚙️  suppress all logs with { quiet: true })
+🔑 Using hardcoded API keys - ready immediately
+Enhanced Magnitude MCP Server (New Tab Mode) starting on port 9124
+CDP URL: http://localhost:9222
+API Key loaded: Yes
+Secrets source: Hardcoded keys
+Timestamp: 2025-08-06T00:09:33.959Z
+
+✨ Each task will open in a new tab in your browser
+
+🔑 Using hardcoded keys - system ready for immediate use
+[2025-08-06T00:09:40.271Z] GET /health - 200 (0ms)
+[Protocol] Registration request - Version: 1.0, Capabilities: []
+[DEBUG] Auth header: undefined
+[DEBUG] Browser API key: "default-browser-key"
+[DEBUG] Protocol negotiation header: "true"
+[DEBUG] All headers: {
+  "host": "localhost:9124",
+  "user-agent": "curl/8.7.1",
+  "accept": "*/*",
+  "content-type": "application/json",
+  "x-protocol-negotiation": "true",
+  "x-protocol-version": "1.0",
+  "content-length": "185"
+}
+[Protocol] Allowing unauthenticated registration for key exchange
+[Security] Browser registration received - Mode: key_exchange_only
+[Protocol] Temporary registration for key exchange: test_proto_fixed
+[2025-08-06T00:09:48.793Z] POST /register-browser - 200 (1ms)
+[Security] Encryption keys validated successfully
+[Protocol] Encryption keys validated for test_proto_fixed
+[Protocol] Key exchange completed for test_proto_fixed
+[2025-08-06T00:09:55.404Z] POST /exchange-keys - 200 (1ms)
+SyntaxError: Bad escaped character in JSON at position 93
+    at JSON.parse (<anonymous>)
+    at parse (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/body-parser/lib/types/json.js:77:19)
+    at /Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/body-parser/lib/read.js:123:18
+    at AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+    at invokeCallback (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/raw-body/index.js:238:16)
+    at done (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/raw-body/index.js:227:7)
+    at IncomingMessage.onEnd (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/raw-body/index.js:287:7)
+    at IncomingMessage.emit (node:events:524:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+SyntaxError: Bad escaped character in JSON at position 93
+    at JSON.parse (<anonymous>)
+    at parse (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/body-parser/lib/types/json.js:77:19)
+    at /Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/body-parser/lib/read.js:123:18
+    at AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+    at invokeCallback (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/raw-body/index.js:238:16)
+    at done (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/raw-body/index.js:227:7)
+    at IncomingMessage.onEnd (/Users/justinkim829/Documents/meteor/chromium/src/chrome/browser/chat/tools/magnitude/node_modules/raw-body/index.js:287:7)
+    at IncomingMessage.emit (node:events:524:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+[Validation] Connection validation successful for test_proto_fixed
+[2025-08-06T00:10:51.911Z] POST /validate-connection - 200 (0ms)
+[2025-08-06T00:11:05.371Z] GET /health - 200 (0ms)
+[Protocol] Registration request - Version: 1.0, Capabilities: [encrypted_communication, token_rotation, key_exchange]
+[DEBUG] Auth header: undefined
+[DEBUG] Browser API key: "default-browser-key"
+[DEBUG] Protocol negotiation header: "true"
+[DEBUG] All headers: {
+  "content-type": "application/json",
+  "x-protocol-version": "1.0",
+  "x-capabilities": "encrypted_communication,token_rotation,key_exchange",
+  "x-protocol-negotiation": "true",
+  "host": "localhost:9124",
+  "connection": "keep-alive",
+  "transfer-encoding": "chunked"
+}
+[Protocol] Allowing unauthenticated registration for key exchange
+[Security] Browser registration received - Mode: key_exchange_only
+[Protocol] Temporary registration for key exchange: test_browser_1754439065363
+[2025-08-06T00:11:05.374Z] POST /register-browser - 200 (0ms)
+[Security] Encryption keys validated successfully
+[Protocol] Encryption keys validated for test_browser_1754439065363
+[Protocol] Key exchange completed for test_browser_1754439065363
+[2025-08-06T00:11:05.375Z] POST /exchange-keys - 200 (0ms)
+[Validation] Connection validation successful for test_browser_1754439065363
+[2025-08-06T00:11:05.376Z] POST /validate-connection - 200 (0ms)
+[Protocol] Registration request - Version: 1.0, Capabilities: [encrypted_communication, token_rotation, key_exchange]
+[DEBUG] Auth header: "Bearer default-browser-key"
+[DEBUG] Browser API key: "default-browser-key"
+[DEBUG] Protocol negotiation header: undefined
+[DEBUG] All headers: {
+  "content-type": "application/json",
+  "authorization": "Bearer default-browser-key",
+  "x-protocol-version": "1.0",
+  "x-capabilities": "encrypted_communication,token_rotation,key_exchange",
+  "host": "localhost:9124",
+  "connection": "keep-alive",
+  "transfer-encoding": "chunked"
+}
+[Security] Browser registration received - Mode: secure
+[Security] Received encryption keys for browser full_test_browser_1754439065377
+  Encryption key length: 44
+  Auth key length: 44
+[Security] Encryption keys validated successfully
+[Security] Browser registered: full_test_browser_1754439065377 on port 9222
+[2025-08-06T00:11:05.378Z] POST /register-browser - 200 (0ms)
+[Protocol] Registration request - Version: 1.0, Capabilities: []
+[DEBUG] Auth header: "Bearer invalid-key"
+[DEBUG] Browser API key: "default-browser-key"
+[DEBUG] Protocol negotiation header: undefined
+[DEBUG] All headers: {
+  "content-type": "application/json",
+  "authorization": "Bearer invalid-key",
+  "x-protocol-version": "1.0",
+  "host": "localhost:9124",
+  "connection": "keep-alive",
+  "transfer-encoding": "chunked"
+}
+[2025-08-06T00:11:05.379Z] POST /register-browser - 401 (0ms)
+[Security] Unauthorized access attempt: ::1 /register-browser
+[Protocol] Registration request - Version: 1.0, Capabilities: []
+[DEBUG] Auth header: undefined
+[DEBUG] Browser API key: "default-browser-key"
+[DEBUG] Protocol negotiation header: "true"
+[DEBUG] All headers: {
+  "content-type": "application/json",
+  "x-protocol-version": "1.0",
+  "x-protocol-negotiation": "true",
+  "host": "localhost:9124",
+  "connection": "keep-alive",
+  "transfer-encoding": "chunked"
+}
+[Protocol] Allowing unauthenticated registration for key exchange
+[Security] Browser registration received - Mode: key_exchange_only
+[Protocol] Temporary registration for key exchange: retry_test_browser_1754439065379
+[2025-08-06T00:11:05.380Z] POST /register-browser - 200 (0ms)
+[Cleanup] Removed expired browser connection: full_test_browser_1754439065377
+[Cleanup] Cleaned up 1 expired browser connections

@@ -77,13 +77,9 @@ export class WebHarness { // implements StateComponent
     // }
 
     async start() {
-        if (this.context.pages().length > 0) {
-            // If context already contains a page, set it as active
-            this.tabs.setActivePage(this.context.pages()[0]);
-        } else {
-            await this.context.newPage();
-            // Other logic for page tracking is automatically handled by TabManager
-        }
+        // Always create a new tab for agent tasks to avoid reusing existing tabs (especially chat tabs)
+        await this.context.newPage();
+        // Other logic for page tracking is automatically handled by TabManager
         await this.visualizer.setup();
     }
 

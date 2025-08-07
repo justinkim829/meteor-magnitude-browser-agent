@@ -147,11 +147,31 @@ export class BrowserProvider {
         }
         
         if ('cdp' in options) {
-            const browser = await chromium.connectOverCDP(options.cdp);
-            if (browser.contexts().length > 0) {
-                return browser.contexts()[0];
+            // Parse CDP URL to handle secure tokens properly
+            const cdpUrl = new URL(options.cdp);
+            const token = cdpUrl.searchParams.get('token');
+            
+            if (token) {
+                // Secure CDP connection with token
+                this.logger.trace(`Connecting to secure CDP at ${options.cdp} with token authentication`);
+                
+                // Pass the full CDP URL including token directly to Playwright
+                const browser = await chromium.connectOverCDP(options.cdp);
+                
+                if (browser.contexts().length > 0) {
+                    return browser.contexts()[0];
+                } else {
+                    return browser.newContext(options.contextOptions);
+                }
             } else {
-                return browser.newContext(options.contextOptions);
+                // Regular CDP connection without token
+                this.logger.trace(`Connecting to CDP at ${options.cdp}`);
+                const browser = await chromium.connectOverCDP(options.cdp);
+                if (browser.contexts().length > 0) {
+                    return browser.contexts()[0];
+                } else {
+                    return browser.newContext(options.contextOptions);
+                }
             }
         } else if ('instance' in options) {
             const browser = options.instance;

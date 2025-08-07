@@ -1,0 +1,32 @@
+[Unit]
+Description=Meteor Browser with Secure CDP Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=meteor
+Group=meteor
+WorkingDirectory=/opt/meteor-browser
+ExecStart=/opt/meteor-browser/launch-meteor-browser.sh
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/meteor-browser/logs /home/meteor/.meteor
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="CDP_TOKEN="
+Environment="DISPLAY=:99"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=meteor-browser
+
+[Install]
+WantedBy=multi-user.target

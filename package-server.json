@@ -1,0 +1,16 @@
+{
+  "name": "magnitude-official-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node magnitude_official_mcp_server.js",
+    "test": "node test_official_magnitude.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "body-parser": "^1.20.0",
+    "magnitude-core": "file:./packages/magnitude-core",
+    "axios": "^1.6.0",
+    "zod": "^3.22.0"
+  }
+}
