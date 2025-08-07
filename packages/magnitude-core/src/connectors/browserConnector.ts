@@ -72,20 +72,25 @@ export class BrowserConnector implements AgentConnector {
     }
 
     async onStart(): Promise<void> {
+        console.log('🔍 DEBUG: BrowserConnector.onStart() called');
         this.logger.info("Starting...");
         
         this.logger.info("Creating new browser context.");
 
         this.context = await BrowserProvider.getInstance().newContext(this.options.browser);
+        console.log(`🔍 DEBUG: Browser context created, existing pages: ${this.context.pages().length}`);
 
         //const contextOptions = this.options.browser && 'contextOptions' in this.options.browser ? this.options.browser.contextOptions : {};
         
+        console.log('🔍 DEBUG: Creating WebHarness');
         this.harness = new WebHarness(this.context, {
             //fallbackViewportDimensions: contextOptions?.viewport ?? { width: 1024, height: 768 },
             virtualScreenDimensions: this.options.virtualScreenDimensions,
             visuals: this.options.visuals
         });
+        console.log('🔍 DEBUG: About to call WebHarness.start()');
         await this.harness.start();
+        console.log('🔍 DEBUG: WebHarness.start() completed');
         this.logger.info("WebHarness started.");
 
         if (this.options.url) {

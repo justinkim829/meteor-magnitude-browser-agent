@@ -898,6 +898,20 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
       });
     }
     
+    // Verify that the browser agent is focused on the correct tab
+    try {
+      const currentPage = browserAgent.page;
+      if (currentPage) {
+        const currentUrl = currentPage.url();
+        const currentTitle = await currentPage.title();
+        console.log(`🔍 FOCUS VERIFICATION: Agent ${taskId} active tab - URL: ${currentUrl}, Title: ${currentTitle}`);
+      } else {
+        console.log(`⚠️  FOCUS WARNING: Agent ${taskId} has no active page!`);
+      }
+    } catch (error) {
+      console.log(`⚠️  FOCUS ERROR: Could not verify agent ${taskId} focus: ${error.message}`);
+    }
+    
     console.log(`✅ Browser agent ${taskId} created with new tab`);
     return browserAgent;
   } catch (error) {

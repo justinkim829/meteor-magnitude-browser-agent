@@ -42,8 +42,10 @@ export class TabManager {
     }
 
     public setActivePage(page: Page) {
+        logger.info(`TabManager: Setting active page to ${page.url()}`);
         this.activePage = page;
         this.events.emit('tabChanged', page);
+        logger.info(`TabManager: Active page set successfully`);
     }
 
     async switchTab(index: number) {

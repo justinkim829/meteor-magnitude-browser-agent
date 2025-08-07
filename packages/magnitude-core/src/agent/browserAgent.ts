@@ -21,9 +21,11 @@ const DEFAULT_BROWSER_AGENT_TEMP = 0.2;
 export async function startBrowserAgent(
     options?: AgentOptions & BrowserConnectorOptions & { narrate?: boolean }//StartAgentWithWebOptions = {}
 ): Promise<BrowserAgent> {
+    console.log('🔍 DEBUG: startBrowserAgent() called');
     //console.log("sba options:", options);
     const { agentOptions, browserOptions } = buildDefaultBrowserAgentOptions({ agentOptions: options ?? {}, browserOptions: options ?? {} });
 
+    console.log('🔍 DEBUG: Creating BrowserAgent instance');
     const agent = new BrowserAgent({
         agentOptions: agentOptions,
         browserOptions: browserOptions,
@@ -34,9 +36,9 @@ export async function startBrowserAgent(
         //agent.events.on('actionStarted', (action: any) => { console.log(action) })
     }
 
-    //console.log('starting agent')
+    console.log('🔍 DEBUG: About to call agent.start()');
     await agent.start();
-    //console.log('agent started');
+    console.log('🔍 DEBUG: agent.start() completed');
     return agent;
 }
 

@@ -37,6 +37,8 @@ export class WebHarness { // implements StateComponent
     public readonly events: EventEmitter<WebHarnessEvents> = new EventEmitter();
 
     constructor(context: BrowserContext, options: WebHarnessOptions = {}) {
+        console.log('🔍 DEBUG: WebHarness constructor called');
+        console.log(`🔍 DEBUG: Context has ${context.pages().length} existing pages`);
         //this.page = page;
         this.context = context;
         this.options = options;
@@ -44,6 +46,7 @@ export class WebHarness { // implements StateComponent
         this.visualizer = new ActionVisualizer(this.context, this.options.visuals ?? {});
         this.transformer = new DOMTransformer();
         this.tabs = new TabManager(context);
+        console.log('🔍 DEBUG: WebHarness constructor completed');
 
         // this.context.on('page', (page: Page) => {
         //     this.setActivePage(page);
@@ -77,10 +80,24 @@ export class WebHarness { // implements StateComponent
     // }
 
     async start() {
-        // Always create a new tab for agent tasks to avoid reusing existing tabs (especially chat tabs)
-        await this.context.newPage();
+        console.log('🔍 DEBUG: ===== WebHarness.start() CALLED =====');
+        // CRITICAL: Always create a new tab for agent tasks - use the existing newTab() method
+        logger.info('WebHarness: Creating new tab for browser agent task');
+        
+        await this.newTab();
+        logger.info('WebHarness: New tab created and focused via newTab() method');
+        
         // Other logic for page tracking is automatically handled by TabManager
         await this.visualizer.setup();
+        
+        // Final verification
+        const finalActivePage = this.tabs.getActivePage();
+        if (finalActivePage) {
+            logger.info(`WebHarness: FINAL VERIFICATION - Active page URL: ${finalActivePage.url()}`);
+            logger.info('WebHarness: SUCCESS - New tab is properly focused and active');
+        } else {
+            logger.error('WebHarness: ERROR - No active page found!');
+        }
     }
 
     get page() {
