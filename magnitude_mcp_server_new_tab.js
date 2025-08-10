@@ -178,6 +178,38 @@ function generateFallbackKeys() {
 // Convert any 127.0.0.1 URLs to localhost for compatibility
 const FIXED_CDP_URL = CDP_URL.replace('127.0.0.1', 'localhost');
 
+// Resolve DevTools WS endpoint from an HTTP CDP URL that may include a token
+// Ensures correct placement of token on /json/version and on the returned ws URL
+async function resolveWsEndpoint(cdpHttpUrlWithToken) {
+  try {
+    const base = new URL(cdpHttpUrlWithToken);
+    const token = base.searchParams.get('token');
+
+    // Build correct /json/version URL and carry token as query param
+    const versionUrl = new URL('/json/version', base.origin);
+    if (token) versionUrl.searchParams.set('token', token);
+    if (versionUrl.hostname === '127.0.0.1') versionUrl.hostname = 'localhost';
+
+    const res = await fetch(versionUrl.toString());
+    if (!res.ok) {
+      throw new Error(`Unexpected status ${res.status} for ${versionUrl.toString()}`);
+    }
+    const body = await res.json();
+    if (!body || !body.webSocketDebuggerUrl) {
+      throw new Error('webSocketDebuggerUrl missing from /json/version response');
+    }
+
+    const wsUrl = new URL(body.webSocketDebuggerUrl);
+    if (wsUrl.hostname === '127.0.0.1') wsUrl.hostname = 'localhost';
+    // Ensure token is present on ws URL for secure handshake
+    if (token) wsUrl.searchParams.set('token', token);
+    return wsUrl.toString();
+  } catch (e) {
+    console.error(`[Security] Failed to resolve WS endpoint: ${e.message}`);
+    throw e;
+  }
+}
+
 // Secure IPC Client for Token Rotation
 class SecureIPCClient {
   constructor(socketPath) {
@@ -796,15 +828,17 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
       // Token detected - use secure CDP mode
       console.log(`[Security] Token detected in CDP URL, using secure authentication`);
       console.log(`[Security] Fixed hostname issue: ${CDP_URL} -> ${FIXED_CDP_URL}`);
-      console.log(`[Security] Passing secure CDP URL directly to magnitude-core: ${FIXED_CDP_URL}`);
-      cdpUrl = FIXED_CDP_URL;
+      // Resolve ws endpoint to avoid malformed http?token=/json/version concatenation
+      cdpUrl = await resolveWsEndpoint(FIXED_CDP_URL);
+      console.log(`[Security] Resolved WS endpoint for secure CDP: [REDACTED]`);
     } else if (process.env.USE_SECURE_CDP === 'true' && browserInstanceId) {
       // No token in URL but secure mode enabled - use browser registration
       console.log(`[Security] Using registered browser connection for ${browserInstanceId}`);
       
               try {
           const connectionInfo = await getSecureBrowserConnection(browserInstanceId);
-          cdpUrl = connectionInfo.cdp_url;
+          // connectionInfo.cdp_url is HTTP with token; resolve to WS endpoint with token
+          cdpUrl = await resolveWsEndpoint(connectionInfo.cdp_url);
           console.log(`[Security] Using secure CDP connection for browser ${browserInstanceId} on port ${connectionInfo.port}`);
           console.log(`[Security] Token age: ${connectionInfo.updated_at ? Math.round((new Date() - connectionInfo.updated_at)/1000) : Math.round((new Date() - connectionInfo.registered_at)/1000)}s since last update`);
         } catch (error) {
