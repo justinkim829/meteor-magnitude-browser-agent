@@ -1,0 +1,26 @@
+{
+  "name": "magnitude-mcp",
+  "version": "0.0.4",
+  "description": "MCP server for Magnitude testing",
+  "main": "build/index.js",
+  "type": "module",
+  "bin": {
+    "magnitude-mcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"require('node:fs').chmodSync('build/index.js', '755')\"",
+    "start": "node build/index.js",
+    "dev": "tsc -w",
+    "test": "tsc && node build/test.js",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.30",
+    "typescript": "^5.8.3"
+  }
+}

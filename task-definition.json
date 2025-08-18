@@ -1,0 +1,53 @@
+{
+  "family": "magnitude-mcp",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::207567797907:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::207567797907:role/magnitude-mcp-task-role",
+  "containerDefinitions": [{
+    "name": "magnitude-mcp-server",
+    "image": "207567797907.dkr.ecr.us-west-2.amazonaws.com/magnitude-mcp-server:latest",
+    "portMappings": [{
+      "containerPort": 9123,
+      "protocol": "tcp"
+    }],
+    "essential": true,
+    "environment": [
+      {"name": "AWS_DEFAULT_REGION", "value": "us-west-2"},
+      {"name": "MAGNITUDE_MCP_PORT", "value": "9123"},
+      {"name": "USE_SECURE_CDP", "value": "true"},
+      {"name": "NODE_ENV", "value": "production"}
+    ],
+    "secrets": [
+      {
+        "name": "ANTHROPIC_API_KEY",
+        "valueFrom": "arn:aws:secretsmanager:us-west-2:207567797907:secret:magnitude-mcp/anthropic-api-key:ANTHROPIC_API_KEY::"
+      },
+      {
+        "name": "MCP_API_KEY",
+        "valueFrom": "arn:aws:secretsmanager:us-west-2:207567797907:secret:magnitude-mcp/mcp-api-key:MCP_API_KEY::"
+      },
+      {
+        "name": "BROWSER_API_KEY",
+        "valueFrom": "arn:aws:secretsmanager:us-west-2:207567797907:secret:magnitude-mcp/browser-api-key:BROWSER_API_KEY::"
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/magnitude-mcp",
+        "awslogs-region": "us-west-2",
+        "awslogs-stream-prefix": "ecs"
+      }
+    },
+    "healthCheck": {
+      "command": ["CMD-SHELL", "curl -f http://localhost:9123/health || exit 1"],
+      "interval": 30,
+      "timeout": 10,
+      "retries": 3,
+      "startPeriod": 60
+    }
+  }]
+}

@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  mcp-server:
+    build: .
+    ports:
+      - "9123:9123"
+    environment:
+      # Server configuration
+      - MAGNITUDE_MCP_PORT=9123
+      - USE_SECURE_CDP=true
+      
+      # API Keys (replace with your actual keys)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MCP_API_KEY=${MCP_API_KEY:-default-mcp-key}
+      - BROWSER_API_KEY=${BROWSER_API_KEY:-default-browser-key}
+      
+      # Node environment
+      - NODE_ENV=production
+      
+    volumes:
+      # Mount local .env file if exists
+      - ./.env:/app/.env:ro
+      
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+          
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Nginx reverse proxy for HTTPS
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - mcp-server
+    restart: unless-stopped

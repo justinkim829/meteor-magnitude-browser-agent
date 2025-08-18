@@ -1,0 +1,267 @@
+import { Browser, BrowserContext, BrowserContextOptions, chromium, LaunchOptions, CDPSession } from "playwright";
+import objectHash from 'object-hash';
+import crypto from 'node:crypto';
+import logger from "@/logger";
+import { Logger } from 'pino';
+
+const DEFAULT_BROWSER_OPTIONS: LaunchOptions = {
+    headless: false,
+    args: ["--disable-gpu", "--disable-blink-features=AutomationControlled"],
+};
+
+export type BrowserOptions = { instance: Browser; contextOptions?: BrowserContextOptions; }
+    | { cdp: string; contextOptions?: BrowserContextOptions; }
+    | { launchOptions?: LaunchOptions; contextOptions?: BrowserContextOptions; }
+    | { context: BrowserContext };
+
+interface ActiveBrowser {
+    // either a browser still being launched or already resolved and ready
+    browserPromise: Promise<Browser>;
+    activeContextsCount: number;
+}
+
+const DEFAULT_BROWSER_CONTEXT_OPTIONS: BrowserContextOptions = {
+    viewport: { width: 1024, height: 768 },
+}
+
+export class BrowserProvider {
+    private activeBrowsers: Record<string, ActiveBrowser> = {};
+    private logger: Logger;
+
+    private constructor() {
+        this.logger = logger.child({ name: 'browser_provider' });
+    }
+
+    public static getInstance(): BrowserProvider {
+        if (!(globalThis as any).__magnitude__) {
+            (globalThis as any).__magnitude__ = {};
+        }
+
+        if (!(globalThis as any).__magnitude__.browserProvider) {
+            (globalThis as any).__magnitude__.browserProvider = new BrowserProvider();
+        }
+
+        return (globalThis as any).__magnitude__.browserProvider;
+    }
+
+    private async _launchOrReuseBrowser(options: LaunchOptions): Promise<ActiveBrowser> {
+        // hash options
+        const hash = objectHash({
+            ...options,
+            logger: options.logger ? crypto.randomUUID() : '' // replace unserializable logger - use UUID to force re-instance in case different loggers provided
+        });
+        
+        let activeBrowser: ActiveBrowser;
+        if (!(hash in this.activeBrowsers)) {
+            this.logger.trace("Launching new browser");
+            // Launch new browser, get the PROMISE
+            const launchPromise = chromium.launch({ ...DEFAULT_BROWSER_OPTIONS, ...options });
+
+            activeBrowser = {
+                browserPromise: launchPromise,
+                activeContextsCount: 0
+            };
+            // add immediately in case others need to await the same one as well
+            this.activeBrowsers[hash] = activeBrowser;
+
+            // Wait for browser to fully start
+            const browser = await launchPromise;
+
+            browser.on('disconnected', () => {
+                delete this.activeBrowsers[hash];
+            });
+
+            return activeBrowser;
+        } else {
+            this.logger.trace("Browser with same launch options exists, reusing");
+            return this.activeBrowsers[hash];
+        }
+    }
+
+    public async _createAndTrackContext(options: BrowserOptions): Promise<BrowserContext> {
+        const activeBrowserEntry = await this._launchOrReuseBrowser('launchOptions' in options ? options.launchOptions! : {});
+        const browser = await activeBrowserEntry.browserPromise;
+        
+        const contextOptions = 'contextOptions' in options ? options.contextOptions : undefined;
+
+        const context = await browser.newContext(contextOptions);
+
+        // Get viewport dimensions from context options or use defaults
+        const viewport = contextOptions?.viewport || { width: 1024, height: 768 };
+        const deviceScaleFactor = contextOptions?.deviceScaleFactor || 1;
+
+        // Apply emulation settings to any new pages created
+        context.on('page', async (page) => {
+            const cdpSession = await page.context().newCDPSession(page);
+            await this._applyEmulationSettings(cdpSession, viewport.width, viewport.height, deviceScaleFactor);
+        });
+
+        activeBrowserEntry.activeContextsCount++;
+
+        context.on('close', async () => {
+            activeBrowserEntry.activeContextsCount--;
+            if (activeBrowserEntry.activeContextsCount <= 0 && browser.isConnected()) {
+                await browser.close();
+            }
+        });
+        return context;
+    }
+
+    public async newContext(options?: BrowserOptions): Promise<BrowserContext> {
+        if (options && 'context' in options) {
+            // Context directly provided, we don't need to manage it
+            return options.context;
+        }
+
+        const dpr = process.env.DEVICE_PIXEL_RATIO ?
+            parseInt(process.env.DEVICE_PIXEL_RATIO) :
+            process.platform === 'darwin' ? 2 : 1;
+        
+        const contextOptions = {
+            ...DEFAULT_BROWSER_CONTEXT_OPTIONS,
+            deviceScaleFactor: dpr,
+            colorScheme: 'dark' as const, // Force dark mode to override Playwright's default light mode emulation
+            ...(options && 'contextOptions' in options && options.contextOptions ? options.contextOptions : {})//options.browser?.contextOptions
+        };
+        
+        console.log('[MAGNITUDE] DARK MODE FIX: Context options colorScheme set to:', contextOptions.colorScheme);
+
+        options = { ...options, contextOptions };
+
+        if (options && process.env.MAGNTIUDE_PLAYGROUND) {
+            // this.logger.trace("MAGNITUDE_PLAYGROUND environment detected, connecting to browser via CDP");
+            // Playground environment - force use CDP on 9222
+            //const browser = await chromium.connectOverCDP('http://localhost:9222');
+            //return browser.newContext(options?.contextOptions);
+            this.logger.trace("MAGNITUDE_PLAYGROUND environment detected, applying playground launch options");
+            const playgroundLaunchOptions = {
+                args: [
+                    '--remote-debugging-port=9222',
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu'
+                ]
+            };
+            // Overwrite any launch options, instance, or cdp configuration with playground launch options
+            // Ignore context options (?)
+            options = {
+                launchOptions: playgroundLaunchOptions
+            };
+        }
+        
+        if (options && 'cdp' in options) {
+            // Parse CDP URL to handle secure tokens properly
+            const cdpUrl = new URL(options.cdp);
+            const token = cdpUrl.searchParams.get('token');
+            
+            if (token) {
+                // Secure CDP connection with token
+                this.logger.trace(`Connecting to secure CDP at ${options.cdp} with token authentication`);
+                console.log('[MAGNITUDE] DARK MODE FIX: Connecting to secure CDP - will reuse persistent browser context');
+                
+                // Pass the full CDP URL including token directly to Playwright
+                const browser = await chromium.connectOverCDP(options.cdp);
+                
+                if (browser.contexts().length > 0) {
+                    console.log('[MAGNITUDE] DARK MODE FIX: Reusing existing persistent browser context (this preserves user session but may have color-scheme emulation)');
+                    const context = browser.contexts()[0];
+                    
+                    // Try to clear any browser-level emulation and set dark mode for existing pages
+                    try {
+                        const pages = context.pages();
+                        if (pages.length > 0) {
+                            for (const page of pages) {
+                                // Use Playwright's page-level emulation to force dark mode
+                                await page.emulateMedia({ colorScheme: 'dark' });
+                                console.log('[MAGNITUDE] DARK MODE FIX: Set page-level dark mode emulation for existing page:', page.url());
+                            }
+                        }
+                    } catch (e) {
+                        console.log('[MAGNITUDE] DARK MODE FIX: Failed to set page-level dark mode emulation on secure CDP context reuse:', e);
+                    }
+                    
+                    return context;
+                } else {
+                    console.log('[MAGNITUDE] DARK MODE FIX: Creating new context in secure CDP browser with colorScheme:', options.contextOptions?.colorScheme);
+                    return browser.newContext(options.contextOptions);
+                }
+            } else {
+                // Regular CDP connection without token
+                this.logger.trace(`Connecting to CDP at ${options.cdp}`);
+                console.log('[MAGNITUDE] DARK MODE FIX: Connecting to insecure CDP - will reuse persistent browser context');
+                const browser = await chromium.connectOverCDP(options.cdp);
+                if (browser.contexts().length > 0) {
+                    console.log('[MAGNITUDE] DARK MODE FIX: Reusing existing persistent browser context (this preserves user session but may have color-scheme emulation)');
+                    const context = browser.contexts()[0];
+                    
+                    // Try to clear any browser-level emulation and set dark mode for existing pages
+                    try {
+                        const pages = context.pages();
+                        if (pages.length > 0) {
+                            for (const page of pages) {
+                                // Use Playwright's page-level emulation to force dark mode
+                                await page.emulateMedia({ colorScheme: 'dark' });
+                                console.log('[MAGNITUDE] DARK MODE FIX: Set page-level dark mode emulation for existing page:', page.url());
+                            }
+                        }
+                    } catch (e) {
+                        console.log('[MAGNITUDE] DARK MODE FIX: Failed to set page-level dark mode emulation on insecure CDP context reuse:', e);
+                    }
+                    
+                    return context;
+                } else {
+                    console.log('[MAGNITUDE] DARK MODE FIX: Creating new context in insecure CDP browser with colorScheme:', options.contextOptions?.colorScheme);
+                    return browser.newContext(options.contextOptions);
+                }
+            }
+        } else if (options && 'instance' in options) {
+            const browser = options.instance;
+            if (browser.contexts().length > 0) {
+                return browser.contexts()[0];
+            } else {
+                return browser.newContext(options.contextOptions);
+            }
+        } else if (options && 'launchOptions' in options) {
+            this.logger.trace('Creating context with custom launch options');
+            return await this._createAndTrackContext(options);
+        } else {
+            // contextOptions might be passed but no instance | cdp | launchOptions
+            this.logger.trace('Creating context for default browser options');
+            return await this._createAndTrackContext(options || {});
+        }
+    }
+
+    private async _applyEmulationSettings(cdpSession: CDPSession, width: number, height: number, deviceScaleFactor: number) {
+        console.log('[MAGNITUDE] Applying emulation settings - clearing all emulation to preserve user dark mode');
+        
+        // Clear all emulation settings that could affect color scheme BEFORE setting device metrics
+        try {
+            await cdpSession.send('Emulation.setEmulatedMedia', { features: [] });
+            await cdpSession.send('Emulation.setAutoDarkModeOverride', { enabled: false });
+            console.log('[MAGNITUDE] Cleared color-scheme and auto dark mode emulation before device metrics');
+        } catch (e) {
+            console.log('[MAGNITUDE] Failed to clear some emulation settings before device metrics:', e);
+        }
+        
+        await cdpSession.send('Emulation.setDeviceMetricsOverride', {
+            width: width,
+            height: height,
+            deviceScaleFactor: deviceScaleFactor,
+            mobile: false,
+            screenWidth: width,
+            screenHeight: height,
+            positionX: 0,
+            positionY: 0,
+            screenOrientation: { angle: 0, type: 'portraitPrimary' }
+        });
+        
+        // Clear color-scheme emulation AGAIN after setting device metrics
+        try {
+            await cdpSession.send('Emulation.setEmulatedMedia', { features: [] });
+            await cdpSession.send('Emulation.setAutoDarkModeOverride', { enabled: false });
+            console.log('[MAGNITUDE] Successfully cleared all emulation after device metrics');
+        } catch (e) {
+            console.log('[MAGNITUDE] Failed to clear some emulation settings after device metrics:', e);
+        }
+    }
+}
