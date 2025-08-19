@@ -391,11 +391,20 @@ export class Agent {
 
             // Execute partial recipe
             for (const action of actions) {
+                // Emit a pre-action thought to stream intent immediately
+                try {
+                    const def = this.identifyAction(action);
+                    this.events.emit('thought', `Planning: ${def.render(action)}`);
+                } catch (_) { /* ignore */ }
+
                 await this.exec(action, memory);
 
-                // const postActionScreenshot = await this.screenshot();
-                // const actionDescriptor: ActionDescriptor = { ...action, screenshot: postActionScreenshot.image } as ActionDescriptor;
-                // this.events.emit('action', actionDescriptor);
+                // Emit a post-action thought to stream completion context
+                try {
+                    const def = this.identifyAction(action);
+                    this.events.emit('thought', `Completed: ${def.render(action)}`);
+                } catch (_) { /* ignore */ }
+
                 logger.info({ action }, `Action taken`);
             }
 

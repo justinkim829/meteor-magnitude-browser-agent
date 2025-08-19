@@ -56,6 +56,13 @@ export function narrateAgent(agent: Agent) {
     agent.events.on('actionStarted', (action: Action) => {
         const actionDefinition = agent.identifyAction(action);
         console.log(bold`  ${actionDefinition.render(action)}`);
+        // Stream a thought for each action as it begins, using the agent's own renderer
+        try {
+            const rendered = actionDefinition.render(action);
+            agent.events.emit('thought', rendered);
+        } catch (_e) {
+            // Ignore rendering errors; console log above still provides visibility
+        }
     });
 }
 

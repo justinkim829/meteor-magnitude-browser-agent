@@ -21,15 +21,13 @@ import crypto from 'crypto';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Global flag to disable all security measures (hardcoded for now)
-const DISABLE_SECURITY = true;
-
-// Secret cache (no hardcoded LLM keys)
+// Direct hardcoded API keys - no external dependencies
 let cachedSecrets = {
-  MCP_API_KEY: process.env.MCP_API_KEY || 'default-mcp-key',
-  BROWSER_API_KEY: process.env.BROWSER_API_KEY || 'default-browser-key',
+  ANTHROPIC_API_KEY: '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',
+  MCP_API_KEY: 'default-mcp-key',
+  BROWSER_API_KEY: 'default-browser-key',
   initialized: true,
-  source: 'remote_endpoint'
+  source: 'hardcoded_keys'
 };
 
 
@@ -40,77 +38,6 @@ function getSecret(key) {
 
 // Load environment variables (for non-secret configuration)
 dotenv.config({ path: join(__dirname, '.env') });
-
-// Secrets endpoint config
-const SECRETS_ENDPOINT_URL =
-  process.env.SECRETS_ENDPOINT_URL ||
-  'http://proxy-load-balancer-582485256.us-west-2.elb.amazonaws.com/get-secrets';
-const MAGNITUDE_USER_ID = process.env.MAGNITUDE_USER_ID;
-
-// In-memory cache for Anthropic key
-let anthropicKeyCache = { value: null, fetchedAt: 0, ttlMs: 15 * 60 * 1000 }; // 15 min
-
-async function fetchAnthropicKeyFromEndpoint() {
-  if (!SECRETS_ENDPOINT_URL) {
-    throw new Error('SECRETS_ENDPOINT_URL not set');
-  }
-  if (!MAGNITUDE_USER_ID) {
-    throw new Error('MAGNITUDE_USER_ID not set (cannot identify user for secrets endpoint)');
-  }
-
-  console.log('[Security] Fetching Anthropic API key from remote endpoint');
-  
-  const resp = await fetch(SECRETS_ENDPOINT_URL, {
-    method: 'GET',
-    headers: {
-      'x-user-id': MAGNITUDE_USER_ID,
-      'accept': 'application/json'
-    }
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Secrets endpoint failed with status ${resp.status}`);
-  }
-
-  const data = await resp.json().catch(() => ({}));
-  const key =
-    data.ANTHROPIC_API_KEY ||
-    data.anthropic_api_key ||
-    data.apiKey ||
-    data.anthropicKey;
-
-  if (!key || typeof key !== 'string') {
-    throw new Error('Anthropic key missing in secrets response');
-  }
-  
-  console.log('[Security] Successfully fetched Anthropic API key from remote endpoint');
-  return key;
-}
-
-async function getAnthropicApiKey(force = false) {
-  const now = Date.now();
-  if (!force && anthropicKeyCache.value && (now - anthropicKeyCache.fetchedAt < anthropicKeyCache.ttlMs)) {
-    console.log('[Security] Using cached Anthropic API key');
-    return anthropicKeyCache.value;
-  }
-
-  // Attempt to fetch from secrets endpoint first; fallback (only if security disabled)
-  try {
-    const key = await fetchAnthropicKeyFromEndpoint();
-    anthropicKeyCache = { value: key, fetchedAt: now, ttlMs: anthropicKeyCache.ttlMs };
-    return key;
-  } catch (err) {
-    console.error('[Security] Failed to fetch Anthropic API key from remote endpoint:', err.message);
-    console.error('[Security] Ensure SECRETS_ENDPOINT_URL is accessible and MAGNITUDE_USER_ID is set');
-    if (DISABLE_SECURITY) {
-      const fallback = process.env.ANTHROPIC_API_KEY || 'dev-anthropic-key';
-      console.warn('[Security] DISABLED: Falling back to local Anthropic API key');
-      anthropicKeyCache = { value: fallback, fetchedAt: now, ttlMs: anthropicKeyCache.ttlMs };
-      return fallback;
-    }
-    throw new Error(`Cannot retrieve Anthropic API key: ${err.message}. No fallback available.`);
-  }
-}
 
 const app = express();
 app.use(bodyParser.json({ limit: '50mb' }));
@@ -154,17 +81,8 @@ app.use(requestLogger);
 // API Key validation middleware
 const validateApiKey = (req, res, next) => {
   // Skip validation for health and tool listing endpoints
-  const publicEndpoints = [
-    '/health',
-    '/mcp/health',
-    '/mcp/tools',
-    '/register-browser',
-    '/exchange-keys',
-    '/validate-connection'
-  ];
-  // Allow all intervention endpoints without API key to simplify native overlay integration
-  const isInterventionEndpoint = req.path.startsWith('/mcp/intervention/');
-  if (publicEndpoints.includes(req.path) || isInterventionEndpoint) {
+  const publicEndpoints = ['/health', '/mcp/health', '/mcp/tools', '/register-browser', '/exchange-keys', '/validate-connection'];
+  if (publicEndpoints.includes(req.path)) {
     return next();
   }
   
@@ -304,21 +222,13 @@ class SecureIPCClient {
     this.encryptionKey = null;  // AES-256-GCM key
     this.authKey = null;        // HMAC-SHA256 key
     this.sequenceNumber = 0;    // Message ordering
-    this.wantSubscription = true;  // Flag to track if we want to subscribe
-    this.subscriptionSent = false; // Flag to track if subscription was sent
   }
   
   // Set encryption keys from browser registration
   setEncryptionKeys(encryptionKey, authKey) {
     this.encryptionKey = encryptionKey;
     this.authKey = authKey;
-    this.wantSubscription = true; // Ensure subscription after keys arrive
     console.log('[SecureIPC] Encryption keys configured for secure communication');
-    
-    // If already connected, subscribe now using encrypted messaging
-    if (this.connected && !this.subscriptionSent) {
-      this.startTokenRotationListener();
-    }
   }
   
   // Generate cryptographically secure nonce
@@ -463,8 +373,6 @@ class SecureIPCClient {
         const uptime = this.lastConnectionTime ? (new Date() - this.lastConnectionTime) : 0;
         console.log('[SecureIPC] STALENESS-1: Connection was up for:', Math.round(uptime/1000), 'seconds');
         this.lastCloseTime = new Date();
-        this.subscriptionSent = false;
-        this.wantSubscription = true;
         this.handleConnectionLoss();
       });
     });
@@ -564,36 +472,35 @@ class SecureIPCClient {
   startTokenRotationListener() {
     if (!this.connected) return;
     
-    // Only send encrypted subscription; defer if keys not ready
-    if (!this.encryptionKey || !this.authKey) {
-      console.log('[SecureIPC] Deferring subscription until encryption keys are available');
-      this.wantSubscription = true;
-      return;
-    }
-    
-    // Don't send duplicate subscriptions
-    if (this.subscriptionSent) {
-      console.log('[SecureIPC] Subscription already sent, skipping duplicate');
-      return;
-    }
-    
     try {
-      console.log('[SecureIPC] Sending encrypted token rotation subscription');
-      
-      // Create subscription payload 
-      const payload = JSON.stringify({
-        type: 'subscribe_token_rotation',
-        timestamp: Date.now()
-      });
-      
-      // Create encrypted message
-      const secureMessage = this.createSecureMessage('SUBSCRIBE_TOKEN_ROTATION', payload);
-      
-      this.client.write(JSON.stringify(secureMessage));
-      
-      this.subscriptionSent = true;
-      this.wantSubscription = false;
-      console.log('[SecureIPC] Encrypted subscription sent to browser');
+      if (this.encryptionKey && this.authKey) {
+        // Use secure encrypted messaging
+        console.log('[SecureIPC] Sending encrypted token rotation subscription');
+        
+        // Create subscription payload 
+        const payload = JSON.stringify({
+          type: 'subscribe_token_rotation',
+          timestamp: Date.now()
+        });
+        
+        // Create encrypted message
+        const secureMessage = this.createSecureMessage('SUBSCRIBE_TOKEN_ROTATION', payload);
+        
+        this.client.write(JSON.stringify(secureMessage));
+        console.log('[SecureIPC] Encrypted subscription sent to browser');
+        
+      } else {
+        // Fallback to plain JSON (compatibility mode)
+        console.log('[SecureIPC] No encryption keys available, using plain JSON (compatibility mode)');
+        
+        const request = {
+          type: 'subscribe_token_rotation',
+          timestamp: Date.now()
+        };
+        
+        this.client.write(JSON.stringify(request));
+        console.log('[SecureIPC] Plain JSON subscription sent to browser');
+      }
     } catch (error) {
       console.error(`[SecureIPC] Failed to subscribe to token rotation: ${error.message}`);
     }
@@ -611,7 +518,6 @@ class SecureIPCClient {
         try {
           // The C++ side expects simple ping messages
           // Heartbeat is just to keep connection alive, not for token rotation
-          this.client.write('ping');
           console.log('[SecureIPC] Sending heartbeat ping to maintain connection');
         } catch (error) {
           console.error('[SecureIPC] Heartbeat failed:', error.message);
@@ -634,8 +540,6 @@ class SecureIPCClient {
   handleConnectionLoss() {
     console.log('[SecureIPC] Connection loss detected, cleaning up...');
     this.connected = false;
-    this.subscriptionSent = false;
-    this.wantSubscription = true;
     this.stopHeartbeat();
     
     if (this.client) {
@@ -768,41 +672,6 @@ let narratorEvents = [];
 let taskIdCounter = 1;
 let taskEventQueues = new Map(); // Map of task ID to TaskEventQueue
 let browserConnections = new Map(); // Map of browser instance ID to connection info
-let pendingInterventions = new Map(); // Map of task ID to intervention state
-let stoppedTasks = new Set(); // Set of task IDs that were explicitly stopped by user
-
-// Tracks the agent's currently active page (for native overlay glow).
-// We intentionally keep this simple: last navigated page for the most recent task.
-// C++ polls this via /mcp/agent/active to highlight the matching tab.
-let agentActiveState = {
-  url: '',
-  taskId: null,
-  timestamp: 0,
-  targetId: ''
-};
-
-// Helper to get the DevTools Target ID for the current Playwright page
-async function getTargetIdForPage(page) {
-  try {
-    if (!page) return '';
-    // Cache per-page target id to minimize CDP roundtrips
-    if (page.__magnitudeTargetId) return page.__magnitudeTargetId;
-    const session = await page.context().newCDPSession(page);
-    const info = await session.send('Target.getTargetInfo');
-    const id = info && info.targetInfo && info.targetInfo.targetId ? info.targetInfo.targetId : '';
-    page.__magnitudeTargetId = id || '';
-    try { await session.detach(); } catch (_) {}
-    return page.__magnitudeTargetId;
-  } catch (e) {
-    return '';
-  }
-}
-
-async function updateAgentActiveState(browserAgent, url, taskId) {
-  const page = browserAgent && browserAgent.page;
-  const targetId = await getTargetIdForPage(page);
-  agentActiveState = { url: url || '', taskId, timestamp: Date.now(), targetId };
-}
 
 // Metrics tracking
 const metrics = {
@@ -944,6 +813,35 @@ async function getSecureBrowserConnection(browserInstanceId) {
   return connectionInfo;
 }
 
+// Wait for a registered secure browser connection to become available.
+// This eliminates a race between server startup/registration and the first task.
+async function waitForRegisteredConnection(browserInstanceId, maxWaitMs = 8000) {
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const endTime = Date.now() + maxWaitMs;
+  let lastError = null;
+
+  while (Date.now() < endTime) {
+    try {
+      // Prefer the requested browser instance if provided
+      const info = await getSecureBrowserConnection(browserInstanceId);
+      return info;
+    } catch (err) {
+      lastError = err;
+      // As a fallback, try any non-expired registered browser
+      for (const [id, info] of browserConnections) {
+        if (new Date() < info.expiry) {
+          return info;
+        }
+      }
+      await sleep(250);
+    }
+  }
+
+  // If we get here, no registration became available in time
+  if (lastError) throw lastError;
+  throw new Error('No registered browser available (timeout waiting for registration)');
+}
+
 // Helper function to create a new browser agent for each task
 async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
   try {
@@ -951,48 +849,104 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
     
     let cdpUrl;
     
-    if (DISABLE_SECURITY) {
-      console.log(`[Security] DISABLED: Using insecure CDP connection at ${FIXED_CDP_URL}`);
-      cdpUrl = FIXED_CDP_URL;
-    } else {
-      // Parse CDP URL to check for token (auto-detect secure mode)
-      const cdpUrlObj = new URL(FIXED_CDP_URL);
-      const token = cdpUrlObj.searchParams.get('token');
-      
-      if (token) {
+    // Parse CDP URL to check for token (auto-detect secure mode)
+    const cdpUrlObj = new URL(FIXED_CDP_URL);
+    const token = cdpUrlObj.searchParams.get('token');
+    
+    if (token) {
       // Token detected - use secure CDP mode
       console.log(`[Security] Token detected in CDP URL, using secure authentication`);
       console.log(`[Security] Fixed hostname issue: ${CDP_URL} -> ${FIXED_CDP_URL}`);
       // Resolve ws endpoint to avoid malformed http?token=/json/version concatenation
       cdpUrl = await resolveWsEndpoint(FIXED_CDP_URL);
       console.log(`[Security] Resolved WS endpoint for secure CDP: [REDACTED]`);
-    } else if (process.env.USE_SECURE_CDP === 'true' && browserInstanceId) {
-      // No token in URL but secure mode enabled - use browser registration
-      console.log(`[Security] Using registered browser connection for ${browserInstanceId}`);
       
-              try {
-          const connectionInfo = await getSecureBrowserConnection(browserInstanceId);
-          // connectionInfo.cdp_url is HTTP with token; resolve to WS endpoint with token
-          cdpUrl = await resolveWsEndpoint(connectionInfo.cdp_url);
-          console.log(`[Security] Using secure CDP connection for browser ${browserInstanceId} on port ${connectionInfo.port}`);
-          console.log(`[Security] Token age: ${connectionInfo.updated_at ? Math.round((new Date() - connectionInfo.updated_at)/1000) : Math.round((new Date() - connectionInfo.registered_at)/1000)}s since last update`);
-        } catch (error) {
-        console.error(`[Security] Failed to get registered browser connection: ${error.message}`);
-        
-        // Check if this is a token expiry issue and there's a fallback
-        if (error.message.includes('expired') || error.message.includes('stale')) {
-          console.log(`[Security] Token expired for ${browserInstanceId}, cleaning up connection`);
-          
-          // Clean up expired connection
-          browserConnections.delete(browserInstanceId);
-          
-          // Provide a clear error message about token staleness
-          throw new Error(`Browser token expired for ${browserInstanceId}. This may be due to token rotation. Please try the task again or restart the browser.`);
-        } else {
-          // Clean up expired or invalid connection
-          browserConnections.delete(browserInstanceId);
-          throw new Error(`Invalid CDP token or connection expired: ${error.message}`);
+      // Connect via Playwright and reuse persistent browser context to avoid creating a new one
+      const browser = await chromium.connectOverCDP(cdpUrl);
+      let context = browser.contexts()[0];
+      if (!context) {
+        for (let i = 0; i < 10 && !context; i++) {
+          await new Promise(r => setTimeout(r, 100));
+          context = browser.contexts()[0];
         }
+      }
+      if (!context) {
+        throw new Error('Persistent browser context not available over CDP');
+      }
+      console.log('[Security] Using persistent browser context over secure CDP');
+      
+      const browserAgent = await startBrowserAgent({
+        browser: { context },
+        llm: {
+          provider: 'anthropic',
+          options: {
+            model: 'claude-sonnet-4-20250514',
+            apiKey: getSecret('ANTHROPIC_API_KEY'),
+            temperature: 0.2,
+            promptCaching: true
+          }
+        },
+        visuals: {
+          showCursor: true,
+          showHoverCircle: false,
+          showClickRipple: false,
+          showDragLine: false,
+          showTypeEffects: false
+        },
+        narrate: true
+      });
+      console.log('✅ Browser agent created using persistent context');
+      return browserAgent;
+    } else if (process.env.USE_SECURE_CDP === 'true') {
+      // Secure mode requested: prefer the registered connection, with a short wait to avoid race
+      console.log('[Security] Secure mode enabled - waiting for registered browser connection (up to 3s)');
+      try {
+        const connectionInfo = await waitForRegisteredConnection(browserInstanceId, 3000);
+        const chosenId = browserInstanceId || [...browserConnections.keys()][0];
+        console.log(`[Security] Using registered connection for browser ${chosenId} on port ${connectionInfo.port}`);
+        // connectionInfo.cdp_url is HTTP with token; resolve to WS endpoint with token
+        cdpUrl = await resolveWsEndpoint(connectionInfo.cdp_url);
+        console.log('[Security] Resolved WS endpoint for secure CDP via registered connection');
+        
+        // Connect via Playwright and reuse persistent browser context
+        const browser = await chromium.connectOverCDP(cdpUrl);
+        let context = browser.contexts()[0];
+        if (!context) {
+          for (let i = 0; i < 10 && !context; i++) {
+            await new Promise(r => setTimeout(r, 100));
+            context = browser.contexts()[0];
+          }
+        }
+        if (!context) {
+          throw new Error('Persistent browser context not available over CDP');
+        }
+        console.log('[Security] Using persistent browser context over secure CDP (registered connection)');
+        
+        const browserAgent = await startBrowserAgent({
+          browser: { context },
+          llm: {
+            provider: 'anthropic',
+            options: {
+              model: 'claude-sonnet-4-20250514',
+              apiKey: getSecret('ANTHROPIC_API_KEY'),
+              temperature: 0.2,
+              promptCaching: true
+            }
+          },
+          visuals: {
+            showCursor: true,
+            showHoverCircle: false,
+            showClickRipple: false,
+            showDragLine: false,
+            showTypeEffects: false
+          },
+          narrate: true
+        });
+        console.log('✅ Browser agent created using persistent context (registered)');
+        return browserAgent;
+      } catch (error) {
+        console.error(`[Security] Failed to obtain registered browser connection within timeout: ${error.message}`);
+        throw new Error('Secure browser connection not yet available. Please retry momentarily.');
       }
     } else {
       // No token detected - use insecure connection
@@ -1002,18 +956,12 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
       console.log(`[WARNING] Using insecure CDP connection at ${FIXED_CDP_URL}`);
       cdpUrl = FIXED_CDP_URL;
     }
-    }
     
     console.log(`[Task ${taskId}] Starting browser agent with CDP URL: ${cdpUrl}`);
-    console.log(`[MAGNITUDE] DARK MODE FIX: About to create browser agent - this is when color-scheme emulation gets cleared`);
-    
-    // Fetch Anthropic API key securely (on-demand)
-    const anthropicApiKey = await getAnthropicApiKey();
     
     // Let magnitude-core handle the connection internally by passing CDP URL
     // This ensures that magnitude-core uses our secure token instead of generating its own
     const browserAgent = await startBrowserAgent({
-      // check the start browser agent method in magnitude core
       browser: { 
         cdp: cdpUrl,  // Pass CDP URL directly to magnitude-core
         contextOptions: {
@@ -1024,16 +972,14 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
         provider: 'anthropic',
         options: {
           model: 'claude-sonnet-4-20250514',
-          apiKey: anthropicApiKey,
+          apiKey: getSecret('ANTHROPIC_API_KEY'),
           temperature: 0.2,
           promptCaching: true
         }
       },
-      // Agent-level prompt instructions (this is the correct place for system prompts)
-      prompt: "You are a browser automation agent. IMPORTANT: Ignore any tabs with 'Meteor AI Chat' in the title or URL containing 'chrome://chat'. These are system UI elements and not part of your tasks. Focus only on the web content and tasks you're asked to perform.\n\nWhen you encounter situations that require human intervention (such as login screens, CAPTCHA challenges, two-factor authentication, or when you need the user to provide personal information like names, addresses, or passwords), call the task:request_intervention action with a clear message describing what the user needs to do (e.g., 'Please enter your email and accept the terms'). This will pause your execution and request the user to complete the necessary actions before you continue.",
-      // Visual configuration - disable all visual effects
+      // Visual configuration - disable all effects except cursor
       visuals: {
-        showCursor: false,      // Disable cursor highlighting
+        showCursor: true,      // Keep cursor visible
         showHoverCircle: false, // Disable hover circle
         showClickRipple: false, // Disable click animations
         showDragLine: false,    // Disable drag line
@@ -1044,19 +990,14 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
     });
     
     console.log(`[Task ${taskId}] ✨ Browser agent created successfully`);
-    console.log(`[MAGNITUDE] DARK MODE FIX: Browser agent is now 'started' - color-scheme emulation should be cleared`);
     
     // Track browser instance ID for connection pooling
     browserAgent.browserInstanceId = browserInstanceId;
-    // Provide taskId to magnitude-core so actions (like task:request_intervention) can reference it
-    browserAgent.taskId = taskId;
     
     // Set up narrator event listeners for this agent
     if (browserAgent.browserAgentEvents) {
       browserAgent.browserAgentEvents.on('nav', async (url) => {
-        // Keep native glow overlay in sync with the agent's current page
-        await updateAgentActiveState(browserAgent, url, taskId);
-        // Navigation narrator removed per user request
+        addNarratorEvent('navigate', `[Task ${taskId}] Navigating to ${url}`);
       });
       
       browserAgent.browserAgentEvents.on('extractStarted', (instructions) => {
@@ -1075,8 +1016,13 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
     // Set up thought event listener - this captures the agent's reasoning
     if (browserAgent.events) {
       browserAgent.events.on('thought', (thought) => {
+        const msg = `[Task ${taskId}] Thought: ${String(thought)}`;
         console.log(`[Task ${taskId}] 💭 Thought: ${thought}`);
-        addNarratorEvent('thought', `[Task ${taskId}] Thought: ${thought}`);
+        // Enqueue directly to this task's SSE queue to avoid any race or regex mismatch
+        const tq = taskEventQueues.get(taskId);
+        if (tq) tq.addEvent('thought', msg);
+        // Also record in narrator log for polling/diagnostics
+        addNarratorEvent('thought', msg);
       });
     }
     
@@ -1087,11 +1033,8 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
         const currentUrl = currentPage.url();
         const currentTitle = await currentPage.title();
         console.log(`🔍 FOCUS VERIFICATION: Agent ${taskId} active tab - URL: ${currentUrl}, Title: ${currentTitle}`);
-        // On agent start, publish current URL and targetId as active for native glow overlay
-        await updateAgentActiveState(browserAgent, currentUrl, taskId);
       } else {
         console.log(`⚠️  FOCUS WARNING: Agent ${taskId} has no active page!`);
-        await updateAgentActiveState(browserAgent, '', taskId);
       }
     } catch (error) {
       console.log(`⚠️  FOCUS ERROR: Could not verify agent ${taskId} focus: ${error.message}`);
@@ -1103,57 +1046,6 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
     console.error(`Failed to create browser agent for task ${taskId}:`, error);
     throw error;
   }
-}
-
-// Handle user intervention requests
-async function handleUserIntervention(taskId, browserAgent, message, data) {
-  console.log(`[Task ${taskId}] User intervention requested: ${message}`);
-  
-  const interventionData = {
-    taskId,
-    message,
-    context: data?.context || '',
-    timestamp: new Date().toISOString(),
-    browserAgent,
-    resolved: false
-  };
-  
-  pendingInterventions.set(taskId, interventionData);
-  
-  // Notify C++ side to show overlay
-  await requestCppOverlay(taskId, message, data?.context || '');
-  
-  // Wait for user decision
-  return new Promise((resolve, reject) => {
-    interventionData.resolve = resolve;
-    interventionData.reject = reject;
-    
-    // Set timeout to prevent hanging forever (5 minutes)
-    setTimeout(() => {
-      if (!interventionData.resolved) {
-        pendingInterventions.delete(taskId);
-        reject(new Error('User intervention timed out'));
-      }
-    }, 5 * 60 * 1000);
-  });
-}
-
-// Request C++ overlay (this will be called by the C++ service)
-async function requestCppOverlay(taskId, message, context) {
-  console.log(`[Intervention] Requesting C++ overlay for task ${taskId}`);
-  
-  // Create event for the task queue
-  const taskQueue = taskEventQueues.get(taskId);
-  if (taskQueue) {
-    taskQueue.addEvent('intervention_overlay_requested', `User intervention needed: ${message}`);
-  }
-  
-  // In a real implementation, we would make an HTTP request to a C++ endpoint
-  // or use some other IPC mechanism. For now, we'll log this.
-  console.log(`[Intervention] C++ overlay request - Task: ${taskId}, Message: ${message}, Context: ${context}`);
-  
-  // The actual C++ integration will be handled in the C++ service file
-  return true;
 }
 
 // Helper function to add narrator events
@@ -1538,17 +1430,6 @@ app.get('/registered-browsers', (req, res) => {
   res.json({ browsers });
 });
 
-// Endpoint for C++ to query the agent's currently active page.
-// Returns the last URL the agent navigated to (best-effort), along with task id.
-app.get('/mcp/agent/active', (req, res) => {
-  res.json({
-    url: agentActiveState.url || '',
-    taskId: agentActiveState.taskId || null,
-    timestamp: agentActiveState.timestamp || 0,
-    targetId: agentActiveState.targetId || ''
-  });
-});
-
 // Token refresh endpoint (fallback when Secure IPC fails)
 app.post('/refresh-token/:browserInstanceId', (req, res) => {
   const browserInstanceId = req.params.browserInstanceId;
@@ -1660,7 +1541,7 @@ app.get('/mcp/events/stream/:taskId', (req, res) => {
   });
   
   // Send initial connection event
-  res.write(`data: ${JSON.stringify({ type: 'connected', taskId })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'connected', taskId })}\n\n`);
   
   // Get task queue
   const taskQueue = taskEventQueues.get(taskId);
@@ -1734,19 +1615,21 @@ app.post('/mcp/execute', async (req, res) => {
       const taskQueue = new TaskEventQueue(taskId);
       taskEventQueues.set(taskId, taskQueue);
       
+      // Emit an explicit SSE event with both type and message for UI parsing
+      taskQueue.addEvent('task_start', `[Task ${taskId}] Starting ${mode}: ${task}`);
+
       // Create a new browser agent for this task (opens new tab)
       const browserAgent = await createBrowserAgentForTask(taskId, browser_instance_id);
       browserAgents.set(taskId, browserAgent);
       
       let result;
+      // Keep narrator log in sync
       addNarratorEvent('task_start', `[Task ${taskId}] Starting ${mode}: ${task}`);
       
       // Navigate to URL if provided
-      // i think this ends up being empty --> let's check in on this
       if (url) {
+        addNarratorEvent('navigate', `[Task ${taskId}] Navigating to ${url}`);
         await browserAgent.nav(url);
-        console.log(`[Task ${taskId}] Navigated to ${url}`);
-        try { await updateAgentActiveState(browserAgent, url, taskId); } catch (_) {}
       }
       
       switch (mode) {
@@ -1769,15 +1652,6 @@ app.post('/mcp/execute', async (req, res) => {
           addNarratorEvent('check', `[Task ${taskId}] ${task}`);
           result = await browserAgent.check(task);
           break;
-
-        // Note: No 'request_intervention' mode. This functionality is provided by the
-        // task:request_intervention action inside magnitude-core which pauses execution.
-          
-        case 'request_intervention':
-          // Request user intervention
-          addNarratorEvent('intervention_requested', `[Task ${taskId}] ${task}`);
-          result = await handleUserIntervention(taskId, browserAgent, task, data);
-          break;
           
         default:
           throw new Error(`Unknown mode: ${mode}`);
@@ -1794,8 +1668,8 @@ app.post('/mcp/execute', async (req, res) => {
       agentData.status = 'completed';
       
     } catch (error) {
-      // Treat explicit user stop (from toast or cleanup) as a clean termination
-      if (stoppedTasks.has(taskId) || (error && error.message && error.message.includes('Target page, context or browser has been closed'))) {
+      // Check if this is a stop-related error
+      if (error.message && error.message.includes('Target page, context or browser has been closed')) {
         console.log(`Task ${taskId} was stopped by user`);
         addNarratorEvent('task_stopped', `[Task ${taskId}] Task stopped by user`);
         
@@ -1805,8 +1679,6 @@ app.post('/mcp/execute', async (req, res) => {
           agentData.status = 'stopped';
           agentData.message = 'Task stopped by user';
         }
-        // Clear stop flag after handling
-        stoppedTasks.delete(taskId);
       } else {
         console.error(`Error executing task ${taskId}:`, error);
         addNarratorEvent('error', `[Task ${taskId}] ${error.message}`);
@@ -1818,16 +1690,22 @@ app.post('/mcp/execute', async (req, res) => {
           
           console.log(`[TokenFailure] Detected token-related error for task ${taskId}`);
           
-          // Find and clean up stale browser connections to force fresh registration
-          for (const [browserId, connectionInfo] of browserConnections) {
-            const tokenAge = connectionInfo.updated_at ? 
-              (new Date() - connectionInfo.updated_at) : 
-              (new Date() - connectionInfo.registered_at);
-            
-            if (tokenAge > 30000) { // Remove tokens older than 30 seconds
-              console.log(`[TokenFailure] Removing stale connection for browser ${browserId} (age: ${Math.round(tokenAge/1000)}s)`);
-              browserConnections.delete(browserId);
+          // In static-token mode, preserve registration; otherwise cleanup stale connections
+          const rotationDisabled = process.env.DISABLE_CDP_TOKEN_ROTATION !== 'false';
+          if (!rotationDisabled) {
+            // Find and clean up stale browser connections to force fresh registration
+            for (const [browserId, connectionInfo] of browserConnections) {
+              const tokenAge = connectionInfo.updated_at ? 
+                (new Date() - connectionInfo.updated_at) : 
+                (new Date() - connectionInfo.registered_at);
+              
+              if (tokenAge > 30000) { // Remove tokens older than 30 seconds
+                console.log(`[TokenFailure] Removing stale connection for browser ${browserId} (age: ${Math.round(tokenAge/1000)}s)`);
+                browserConnections.delete(browserId);
+              }
             }
+          } else {
+            console.log('[TokenFailure] Rotation disabled - preserving existing browser registrations');
           }
         }
         
@@ -1879,126 +1757,13 @@ app.post('/mcp/cleanup/:taskId', async (req, res) => {
     }
   }
   
-  // Emit final stopped event before destroying queue so SSE clients receive it
-  addNarratorEvent('task_stopped', `[Task ${taskId}] Task stopped by user`);
-
-  // Clean up event queue after emitting
+  // Clean up event queue
   if (taskEventQueues.has(taskId)) {
     taskEventQueues.get(taskId).destroy();
     taskEventQueues.delete(taskId);
   }
   
-  // Ensure this task won't be treated as error downstream
-  stoppedTasks.add(taskId);
-
-  // If the active state points to this task, clear it so native glow hides
-  if (agentActiveState.taskId === taskId) {
-    agentActiveState = { url: '', taskId: null, timestamp: Date.now() };
-  }
-  
   res.json({ success: true, message: `Task cleaned up` });
-});
-
-// Register an intervention request explicitly from core action
-app.post('/mcp/intervention/request', (req, res) => {
-  const { taskId, message, context } = req.body || {};
-  if (typeof taskId !== 'number' || !message) {
-    return res.status(400).json({ error: 'Missing taskId or message' });
-  }
-  const interventionData = {
-    taskId,
-    message,
-    context: context || '',
-    timestamp: new Date().toISOString(),
-    resolved: false
-  };
-  pendingInterventions.set(taskId, interventionData);
-  addNarratorEvent('intervention_requested', `[Task ${taskId}] ${message}`);
-  // Fire overlay request path for C++
-  requestCppOverlay(taskId, message, context || '').catch(() => {});
-  res.json({ success: true });
-});
-
-// Report intervention status for a task (polled by core action)
-app.get('/mcp/intervention/status/:taskId', (req, res) => {
-  const taskId = parseInt(req.params.taskId);
-  const item = pendingInterventions.get(taskId);
-  if (!item) {
-    return res.json({ resolved: false });
-  }
-  res.json({ resolved: !!item.resolved, action: item.action, message: item.message });
-});
-
-// Handle user intervention response from C++
-app.post('/mcp/intervention/respond/:taskId', async (req, res) => {
-  const taskId = parseInt(req.params.taskId);
-  const { action, message } = req.body; // action: 'continue' or 'stop'
-  
-  console.log(`[Intervention] User response for task ${taskId}: ${action}`);
-  
-  const interventionData = pendingInterventions.get(taskId);
-  if (!interventionData) {
-    return res.status(404).json({ 
-      error: 'Intervention request not found',
-      taskId 
-    });
-  }
-  
-  interventionData.resolved = true;
-  interventionData.action = action;
-  interventionData.response_message = message;
-  // Keep the entry for status polling; a cleanup routine can clear old entries later
-  pendingInterventions.set(taskId, interventionData);
-  
-  if (action === 'stop') {
-    // Mark task as explicitly stopped to avoid surfacing as error in executor catch
-    stoppedTasks.add(taskId);
-  }
-  
-  // Add narrator event
-  addNarratorEvent('intervention_response', `[Task ${taskId}] User chose: ${action}`);
-  
-  if (action === 'continue') {
-    // Resolve the promise to continue execution if a waiter exists
-    if (typeof interventionData.resolve === 'function') {
-      interventionData.resolve({
-        action: 'continue',
-        message: message || 'User chose to continue'
-      });
-    }
-  } else if (action === 'stop') {
-    // Reject the promise to stop execution if a waiter exists
-    if (typeof interventionData.reject === 'function') {
-      interventionData.reject(new Error(message || 'User chose to stop the task'));
-    }
-  } else {
-    if (typeof interventionData.reject === 'function') {
-      interventionData.reject(new Error('Invalid action provided'));
-    }
-  }
-  
-  res.json({ 
-    success: true, 
-    message: `Intervention response processed: ${action}`,
-    taskId 
-  });
-});
-
-// Get pending intervention requests (for C++ to check)
-app.get('/mcp/intervention/pending', (req, res) => {
-  const pending = Array.from(pendingInterventions.values())
-    .filter(intervention => !intervention.resolved)
-    .map(intervention => ({
-      taskId: intervention.taskId,
-      message: intervention.message,
-      context: intervention.context,
-      timestamp: intervention.timestamp
-    }));
-  
-  res.json({ 
-    pending_interventions: pending,
-    count: pending.length
-  });
 });
 
 // List available tools (MCP standard endpoint)
@@ -2057,24 +1822,6 @@ app.get('/mcp/tools', (req, res) => {
         },
         required: ['description']
       }
-    },
-    {
-      name: 'magnitude_request_intervention',
-      description: 'Request user intervention when the agent needs human help (login screens, form filling, confirmations)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          message: {
-            type: 'string',
-            description: 'Message explaining what the user needs to do'
-          },
-          context: {
-            type: 'string',
-            description: 'Additional context about why intervention is needed'
-          }
-        },
-        required: ['message']
-      }
     }
   ];
   
@@ -2110,8 +1857,8 @@ function createZodSchemaFromObject(schemaObj) {
 // Start server with enhanced initialization
 async function startServer() {
   try {
-    // Remote secrets configuration validated - ready for secure key retrieval
-    console.log('🔑 Remote secrets endpoint configured - keys will be fetched securely');
+    // Hardcoded keys are already initialized - no additional setup needed
+    console.log('🔑 Using hardcoded API keys - ready immediately');
     
     // Apply API key validation middleware AFTER secrets are initialized
     app.use(validateApiKey);
@@ -2124,15 +1871,15 @@ async function startServer() {
         console.log(`Fixed CDP URL: ${FIXED_CDP_URL} (hostname compatibility fix)`);
       }
       
-      // Report secret retrieval configuration without exposing values
-      const endpointConfigured = !!SECRETS_ENDPOINT_URL;
-      const userIdPresent = !!MAGNITUDE_USER_ID;
-      console.log(`Secrets endpoint configured: ${endpointConfigured ? 'Yes' : 'No'}`);
-      console.log(`User ID available: ${userIdPresent ? 'Yes' : 'No'}`);
-      console.log(`Secrets source: Remote endpoint (on-demand) with in-memory cache`);
+      // Check API key status and determine source
+      const anthropicKeyStatus = cachedSecrets.ANTHROPIC_API_KEY ? 'Yes' : 'No';
+      console.log(`API Key loaded: ${anthropicKeyStatus}`);
+      
+      // Keys are always hardcoded now
+      console.log(`Secrets source: Hardcoded keys`);
       console.log(`Timestamp: ${new Date().toISOString()}`);
       console.log('\n✨ Each task will open in a new tab in your browser');
-      console.log('\n🔑 LLM key will be fetched securely when first needed');
+      console.log('\n🔑 Using hardcoded keys - system ready for immediate use');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -2267,9 +2014,9 @@ app.get('/mcp/browser/recommend', (req, res) => {
   }
 });
 
-// Graceful shutdown function
-async function gracefulShutdown(signal) {
-  console.log(`\nReceived ${signal}, shutting down gracefully...`);
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\nShutting down gracefully...');
   
   // Clean up connection cleanup interval
   cleanupExpiredConnections();
@@ -2297,10 +2044,4 @@ async function gracefulShutdown(signal) {
   }
   
   process.exit(0);
-}
-
-// Handle both SIGINT (Ctrl+C) and SIGTERM (sent by browser during shutdown)
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-
-
+});
