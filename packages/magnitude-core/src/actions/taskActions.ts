@@ -30,61 +30,14 @@ export const failAction = createAction({
 
 export const requestInterventionAction = createAction({
     name: 'task:request_intervention',
-    description: 'Request the user to intervene (e.g., log in, fill sensitive info), then resume when they continue.',
+    description: '[DISABLED] Request the user to intervene ONLY when blocked by login/auth, payment, identity verification, or missing user info needed to proceed right before executing an external/committing action (e.g., before booking a flight). Keep the request short and specific.',
     schema: z.object({
         message: z.string().describe('What you need the user to do'),
         context: z.string().optional().describe('Optional extra context')
     }),
     resolver: async ({ input: { message, context }, agent }) => {
-        // Read task id injected by host (MCP server) when creating the agent
-        const taskId = (agent as any).taskId ?? 0;
-        const port = process.env.MAGNITUDE_MCP_PORT || process.env.MAGNITUDE_PORT || '9123';
-        const baseUrl = `http://localhost:${port}`;
-        const apiKey = process.env.MCP_API_KEY || 'default-mcp-key';
-
-        try {
-            // Register the intervention request
-            const resp = await fetch(`${baseUrl}/mcp/intervention/request`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': apiKey
-                },
-                body: JSON.stringify({ taskId, message, context })
-            });
-            if (!resp?.ok) {
-                throw new Error(`Failed to register intervention (status ${resp?.status})`);
-            }
-
-            // Poll for completion
-            const timeoutMs = 5 * 60 * 1000; // 5 minutes
-            const start = Date.now();
-            // Small initial delay to allow overlay to render
-            await new Promise(r => setTimeout(r, 500));
-
-            while (Date.now() - start < timeoutMs) {
-                const statusResp = await fetch(`${baseUrl}/mcp/intervention/status/${taskId}`, {
-                    method: 'GET',
-                    headers: { 'X-API-Key': apiKey }
-                });
-                if (statusResp?.ok) {
-                    const data = await statusResp.json();
-                    if (data && data.resolved) {
-                        if (data.action === 'continue') {
-                            return; // resume execution
-                        } else if (data.action === 'stop') {
-                            throw new AgentError(data.message || 'Task stopped by user', { variant: 'cancelled' });
-                        }
-                    }
-                }
-                // Wait before next poll
-                await new Promise(r => setTimeout(r, 1500));
-            }
-
-            throw new AgentError('User intervention timed out', { variant: 'cancelled' });
-        } catch (e: any) {
-            throw new AgentError(`Intervention failed: ${e?.message || String(e)}`, { variant: 'unknown', adaptable: true });
-        }
+        // Human intervention disabled.
+        throw new AgentError('User intervention is currently disabled', { variant: 'cancelled' });
     },
     render: ({ message }) => `⏸ request user intervention: ${message}`
 });
@@ -92,5 +45,5 @@ export const requestInterventionAction = createAction({
 export const taskActions = [
     doneAction,
     failAction,
-    requestInterventionAction
+    // requestInterventionAction // Human intervention disabled
 ] as const;

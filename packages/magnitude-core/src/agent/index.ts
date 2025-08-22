@@ -391,20 +391,8 @@ export class Agent {
 
             // Execute partial recipe
             for (const action of actions) {
-                // Emit a pre-action thought to stream intent immediately
-                try {
-                    const def = this.identifyAction(action);
-                    this.events.emit('thought', `Planning: ${def.render(action)}`);
-                } catch (_) { /* ignore */ }
-
+                // Do not emit action renders as thoughts; keep thoughts for pure reasoning only
                 await this.exec(action, memory);
-
-                // Emit a post-action thought to stream completion context
-                try {
-                    const def = this.identifyAction(action);
-                    this.events.emit('thought', `Completed: ${def.render(action)}`);
-                } catch (_) { /* ignore */ }
-
                 logger.info({ action }, `Action taken`);
             }
 
