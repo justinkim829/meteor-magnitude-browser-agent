@@ -72,25 +72,38 @@ export class BrowserConnector implements AgentConnector {
     }
 
     async onStart(): Promise<void> {
+<<<<<<< HEAD
         console.log('🔍 DEBUG: BrowserConnector.onStart() called');
+=======
+>>>>>>> Bremote/main
         this.logger.info("Starting...");
         
         this.logger.info("Creating new browser context.");
 
         this.context = await BrowserProvider.getInstance().newContext(this.options.browser);
+<<<<<<< HEAD
         console.log(`🔍 DEBUG: Browser context created, existing pages: ${this.context.pages().length}`);
 
         //const contextOptions = this.options.browser && 'contextOptions' in this.options.browser ? this.options.browser.contextOptions : {};
         
         console.log('🔍 DEBUG: Creating WebHarness');
+=======
+
+        //const contextOptions = this.options.browser && 'contextOptions' in this.options.browser ? this.options.browser.contextOptions : {};
+        
+>>>>>>> Bremote/main
         this.harness = new WebHarness(this.context, {
             //fallbackViewportDimensions: contextOptions?.viewport ?? { width: 1024, height: 768 },
             virtualScreenDimensions: this.options.virtualScreenDimensions,
             visuals: this.options.visuals
         });
+<<<<<<< HEAD
         console.log('🔍 DEBUG: About to call WebHarness.start()');
         await this.harness.start();
         console.log('🔍 DEBUG: WebHarness.start() completed');
+=======
+        await this.harness.start();
+>>>>>>> Bremote/main
         this.logger.info("WebHarness started.");
 
         if (this.options.url) {
@@ -103,6 +116,13 @@ export class BrowserConnector implements AgentConnector {
 
     async onStop(): Promise<void> {
         this.logger.info("Stopping...");
+<<<<<<< HEAD
+=======
+        if (this.harness) {
+            await this.harness.stop();
+            this.logger.info("WebHarness cleaned up.");
+        }
+>>>>>>> Bremote/main
         if (this.context) {
             await this.context.close();
             this.logger.info("Browser context closed.");

@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "name": "demo-workflow",
+    "startUrl": "https://google.com",
+    "browser": {
+      "mode": "cdp",
+      "cdpUrl": "ws://localhost:9222/devtools/browser/62c23669-e0ca-4ae4-8be3-b4fa7d01b2e3",
+      "contextOptions": {
+        "viewport": {
+          "width": 1280,
+          "height": 800
+        },
+        "deviceScaleFactor": 2
+      }
+    },
+    "virtualScreenDimensions": {
+      "width": 1024,
+      "height": 768
+    },
+    "createdAt": "2025-08-16T22:08:48.021Z",
+    "workflowVersion": 1
+  },
+  "steps": [
+    {
+      "kind": "click",
+      "x": 511,
+      "y": 328
+    },
+    {
+      "kind": "type",
+      "content": "YC S25 batch companies list"
+    },
+    {
+      "kind": "enter"
+    },
+    {
+      "kind": "click",
+      "x": 961,
+      "y": 51
+    },
+    {
+      "kind": "scroll",
+      "x": 855,
+      "y": 400,
+      "deltaX": 0,
+      "deltaY": 200
+    },
+    {
+      "kind": "click",
+      "x": 779,
+      "y": 337
+    },
+    {
+      "kind": "click",
+      "x": 208,
+      "y": 197
+    },
+    {
+      "kind": "click",
+      "x": 988,
+      "y": 92
+    },
+    {
+      "kind": "click",
+      "x": 988,
+      "y": 92
+    },
+    {
+      "kind": "type",
+      "content": "Ginkgo Bioworks"
+    }
+  ]
+}

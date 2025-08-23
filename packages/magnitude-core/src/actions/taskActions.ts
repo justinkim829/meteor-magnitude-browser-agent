@@ -2,10 +2,13 @@ import { AgentError } from "@/agent/errors";
 import { ActionDefinition, ActionPayload, createAction } from ".";
 import { z } from "zod";
 
+<<<<<<< HEAD
 // Node 18+ provides global fetch at runtime; declare for TS type compatibility
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 declare const fetch: any;
 
+=======
+>>>>>>> Bremote/main
 export const doneAction = createAction({
     name: 'task:done',
     description: "ONLY once you have seen sufficient evidence of the task's completion, mark it as done",//Use once sure that task is finished',//'Designate current task as finished',// Do not use until you can verify the task is completed.
@@ -28,6 +31,7 @@ export const failAction = createAction({
     render: () => `✕ fail`
 });
 
+<<<<<<< HEAD
 export const requestInterventionAction = createAction({
     name: 'task:request_intervention',
     description: '[DISABLED] Request the user to intervene ONLY when blocked by login/auth, payment, identity verification, or missing user info needed to proceed right before executing an external/committing action (e.g., before booking a flight). Keep the request short and specific.',
@@ -46,4 +50,9 @@ export const taskActions = [
     doneAction,
     failAction,
     // requestInterventionAction // Human intervention disabled
+=======
+export const taskActions = [
+    doneAction,
+    failAction
+>>>>>>> Bremote/main
 ] as const;

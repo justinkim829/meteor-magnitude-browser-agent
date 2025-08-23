@@ -196,7 +196,16 @@ export class Agent {
         }
 
         this.events.emit('actionStarted', action);
+<<<<<<< HEAD
         
+=======
+
+        // Pre-step: record current observations so the next 'action:taken' pairs with a pre-step screenshot
+        if (memory) {
+            await this._recordConnectorObservations(memory);
+        }
+
+>>>>>>> Bremote/main
         const data = await actionDefinition.resolver(
             { input: parsed.data, agent: this }
         );
@@ -219,6 +228,7 @@ export class Agent {
 
     protected async _recordConnectorObservations(memory: AgentMemory) {
         for (const connector of this.connectors) {
+<<<<<<< HEAD
             try {
                 // could do Promise.all if matters
                 const connObservations = connector.collectObservations ? await connector.collectObservations() : [];
@@ -228,6 +238,13 @@ export class Agent {
                 }
             } catch (error) {
                 logger.warn(`Agent: Error getting observations from connector ${connector.id}: ${error instanceof Error ? error.message : String(error)}`);
+=======
+            // could do Promise.all if matters
+            const connObservations = connector.collectObservations ? await connector.collectObservations() : [];
+            //observations.push(...connObservations);
+            for (const obs of connObservations) {
+                memory.recordObservation(obs);
+>>>>>>> Bremote/main
             }
         }
     }
@@ -391,8 +408,16 @@ export class Agent {
 
             // Execute partial recipe
             for (const action of actions) {
+<<<<<<< HEAD
                 // Do not emit action renders as thoughts; keep thoughts for pure reasoning only
                 await this.exec(action, memory);
+=======
+                await this.exec(action, memory);
+
+                // const postActionScreenshot = await this.screenshot();
+                // const actionDescriptor: ActionDescriptor = { ...action, screenshot: postActionScreenshot.image } as ActionDescriptor;
+                // this.events.emit('action', actionDescriptor);
+>>>>>>> Bremote/main
                 logger.info({ action }, `Action taken`);
             }
 

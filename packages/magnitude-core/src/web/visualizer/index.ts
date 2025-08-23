@@ -24,11 +24,19 @@ export class ActionVisualizer {
     constructor(context: BrowserContext, options: ActionVisualizerOptions) {
         this.context = context;
         this.options = {
+<<<<<<< HEAD
             showCursor: true,
             showHoverCircle: false,
             showClickRipple: false,
             showDragLine: false,
             showTypeEffects: false
+=======
+            showCursor: options.showCursor ?? true,
+            showHoverCircle: options.showHoverCircle ?? false,
+            showClickRipple: options.showClickRipple ?? true,
+            showDragLine: options.showDragLine ?? false,
+            showTypeEffects: options.showTypeEffects ?? true
+>>>>>>> Bremote/main
         };
 
         this.cursor = new CursorVisual();
@@ -46,6 +54,7 @@ export class ActionVisualizer {
 
     async setActivePage(page: Page) {
         this.page = page;
+<<<<<<< HEAD
         if (this.options.showCursor) {
             await this.cursor.setActivePage(page);
         }
@@ -53,10 +62,16 @@ export class ActionVisualizer {
         if (this.options.showTypeEffects) {
             await this.typeEffects.setActivePage(page);
         }
+=======
+        await this.cursor.setActivePage(page);
+        await this.mouseEffects.setActivePage(page);
+        await this.typeEffects.setActivePage(page);
+>>>>>>> Bremote/main
     }
 
     async moveVirtualCursor(x: number, y: number) {
         // Takes like 300ms for smooth anim
+<<<<<<< HEAD
         if (this.options.showCursor) {
             await this.cursor.move(x, y);
         }
@@ -72,5 +87,16 @@ export class ActionVisualizer {
         if (this.options.showCursor) {
             await this.cursor.show();
         }
+=======
+        await this.cursor.move(x, y);
+    }
+
+    async hideAll() {
+        await this.cursor.hide();
+    }
+
+    async showAll() {
+        await this.cursor.show();
+>>>>>>> Bremote/main
     }
 }

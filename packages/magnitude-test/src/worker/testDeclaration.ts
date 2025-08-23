@@ -1,6 +1,10 @@
 import { TestDeclaration, TestOptions, TestFunction, TestGroupFunction } from '../discovery/types';
 import { addProtocolIfMissing, processUrl } from '@/util';
+<<<<<<< HEAD
 import { getTestWorkerData } from '@/worker/util';
+=======
+import { getTestWorkerData, hooks, TestHooks } from '@/worker/util';
+>>>>>>> Bremote/main
 import { currentGroupOptions, registerTest, setCurrentGroup } from '@/worker/localTestRegistry';
 
 const workerData = getTestWorkerData();
@@ -78,4 +82,22 @@ testDecl.group = function (
 
 export const test = testDecl as TestDeclaration;
 
+<<<<<<< HEAD
 export { testPromptStack };
+=======
+export { testPromptStack };
+
+function createHookRegistrar(kind: keyof TestHooks) {
+    return function (fn: TestHooks[typeof kind][number]) {
+        if (typeof fn !== "function") {
+            throw new Error(`${kind} expects a function`);
+        }
+        hooks[kind].push(fn);
+    };
+}
+
+export const beforeAll = createHookRegistrar("beforeAll");
+export const afterAll = createHookRegistrar("afterAll");
+export const beforeEach = createHookRegistrar("beforeEach");
+export const afterEach = createHookRegistrar("afterEach");
+>>>>>>> Bremote/main

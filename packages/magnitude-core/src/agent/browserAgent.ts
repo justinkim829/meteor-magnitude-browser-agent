@@ -9,6 +9,10 @@ import { renderMinimalAccessibilityTree } from "@/web/util";
 import { narrateAgent, narrateBrowserAgent } from "./narrator";
 import { PartitionOptions, partitionHtml, MarkdownSerializerOptions, serializeToMarkdown } from 'magnitude-extract';
 import EventEmitter from "eventemitter3";
+<<<<<<< HEAD
+=======
+import { retry } from "@/common/retry";
+>>>>>>> Bremote/main
 
 // export interface StartAgentWithWebOptions {
 //     agentBaseOptions?: Partial<AgentOptions>;
@@ -21,11 +25,17 @@ const DEFAULT_BROWSER_AGENT_TEMP = 0.2;
 export async function startBrowserAgent(
     options?: AgentOptions & BrowserConnectorOptions & { narrate?: boolean }//StartAgentWithWebOptions = {}
 ): Promise<BrowserAgent> {
+<<<<<<< HEAD
     console.log('🔍 DEBUG: startBrowserAgent() called');
     //console.log("sba options:", options);
     const { agentOptions, browserOptions } = buildDefaultBrowserAgentOptions({ agentOptions: options ?? {}, browserOptions: options ?? {} });
 
     console.log('🔍 DEBUG: Creating BrowserAgent instance');
+=======
+    //console.log("sba options:", options);
+    const { agentOptions, browserOptions } = buildDefaultBrowserAgentOptions({ agentOptions: options ?? {}, browserOptions: options ?? {} });
+
+>>>>>>> Bremote/main
     const agent = new BrowserAgent({
         agentOptions: agentOptions,
         browserOptions: browserOptions,
@@ -36,6 +46,7 @@ export async function startBrowserAgent(
         //agent.events.on('actionStarted', (action: any) => { console.log(action) })
     }
 
+<<<<<<< HEAD
     console.log('🔍 DEBUG: About to call agent.start()');
     await agent.start();
     console.log('🔍 DEBUG: agent.start() completed');
@@ -52,6 +63,11 @@ export async function startBrowserAgent(
             } catch (_) { /* ignore */ }
         });
     } catch (_) { /* ignore bridge setup errors */ }
+=======
+    //console.log('starting agent')
+    await agent.start();
+    //console.log('agent started');
+>>>>>>> Bremote/main
     return agent;
 }
 
@@ -134,7 +150,14 @@ export class BrowserAgent extends Agent {
     async extract<T extends Schema>(instructions: string, schema: T): Promise<z.infer<T>> {
         this.browserAgentEvents.emit('extractStarted', instructions, schema);
         //const htmlContent = await this.page.content();
+<<<<<<< HEAD
         const htmlContent = await getFullPageContent(this.page);
+=======
+        const htmlContent = await retry(
+            async () => await getFullPageContent(this.page),
+            { retries: 5, delay: 200, exponential: true }
+        );
+>>>>>>> Bremote/main
         // const accessibilityTree = await this.page.accessibility.snapshot({ interestingOnly: true });
         // const pageRepr = renderMinimalAccessibilityTree(accessibilityTree);
 

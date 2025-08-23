@@ -1,0 +1,230 @@
+{
+  "metadata": {
+    "name": "demo-workflow",
+    "startUrl": "https://google.com",
+    "browser": {
+      "mode": "cdp",
+      "cdpUrl": "ws://localhost:9222/devtools/browser/62c23669-e0ca-4ae4-8be3-b4fa7d01b2e3",
+      "contextOptions": {
+        "viewport": {
+          "width": 1280,
+          "height": 800
+        },
+        "deviceScaleFactor": 2
+      }
+    },
+    "virtualScreenDimensions": {
+      "width": 1024,
+      "height": 768
+    },
+    "createdAt": "2025-08-16T22:08:48.021Z",
+    "workflowVersion": 1
+  },
+  "steps": [
+    {
+      "kind": "click",
+      "x": 511,
+      "y": 328
+    },
+    {
+      "kind": "type",
+      "content": "YC S25 batch companies list"
+    },
+    {
+      "kind": "enter"
+    },
+    {
+      "kind": "click",
+      "x": 961,
+      "y": 51
+    },
+    {
+      "kind": "scroll",
+      "x": 855,
+      "y": 400,
+      "deltaX": 0,
+      "deltaY": 200
+    },
+    {
+      "kind": "click",
+      "x": 779,
+      "y": 337
+    },
+    {
+      "kind": "click",
+      "x": 208,
+      "y": 197
+    },
+    {
+      "kind": "click",
+      "x": 988,
+      "y": 92
+    },
+    {
+      "kind": "click",
+      "x": 988,
+      "y": 92
+    },
+    {
+      "kind": "type",
+      "content": "Ginkgo Bioworks"
+    }
+  ],
+  "generalizations": {
+    "1": {
+      "gate": {
+        "source": "vision",
+        "category": "type"
+      },
+      "control": {
+        "variable": {
+          "name": "yc_batch_search_query",
+          "kind": "string",
+          "description": "Search query for Y Combinator batch companies and information",
+          "defaultStringValue": "YC S25 batch companies list"
+        },
+        "options": []
+      }
+    },
+    "3": {
+      "gate": {
+        "source": "vision",
+        "category": "menu"
+      },
+      "control": {
+        "variable": {
+          "name": "googleAppsMenu",
+          "kind": "string"
+        },
+        "options": [
+          {
+            "id": "Google Apps Menu",
+            "displayLabel": "Google Apps Menu",
+            "clickPoint": {
+              "x": 957,
+              "y": 51
+            }
+          }
+        ],
+        "imageSize": {
+          "width": 1024,
+          "height": 768
+        }
+      }
+    },
+    "5": {
+      "gate": {
+        "source": "vision",
+        "category": "menu"
+      },
+      "control": {
+        "variable": {
+          "name": "googleApp",
+          "kind": "string"
+        },
+        "options": [
+          {
+            "id": "Search",
+            "displayLabel": "Search",
+            "clickPoint": {
+              "x": 779,
+              "y": 171
+            }
+          },
+          {
+            "id": "Calendar",
+            "displayLabel": "Calendar",
+            "clickPoint": {
+              "x": 855,
+              "y": 171
+            }
+          },
+          {
+            "id": "News",
+            "displayLabel": "News",
+            "clickPoint": {
+              "x": 931,
+              "y": 171
+            }
+          },
+          {
+            "id": "Photos",
+            "displayLabel": "Photos",
+            "clickPoint": {
+              "x": 779,
+              "y": 265
+            }
+          },
+          {
+            "id": "Meet",
+            "displayLabel": "Meet",
+            "clickPoint": {
+              "x": 855,
+              "y": 265
+            }
+          },
+          {
+            "id": "Translate",
+            "displayLabel": "Translate",
+            "clickPoint": {
+              "x": 931,
+              "y": 265
+            }
+          },
+          {
+            "id": "Sheets",
+            "displayLabel": "Sheets",
+            "clickPoint": {
+              "x": 779,
+              "y": 360
+            }
+          },
+          {
+            "id": "Docs",
+            "displayLabel": "Docs",
+            "clickPoint": {
+              "x": 855,
+              "y": 360
+            }
+          },
+          {
+            "id": "Slides",
+            "displayLabel": "Slides",
+            "clickPoint": {
+              "x": 931,
+              "y": 337
+            }
+          },
+          {
+            "id": "Google One",
+            "displayLabel": "Google One",
+            "clickPoint": {
+              "x": 777,
+              "y": 454
+            }
+          }
+        ],
+        "imageSize": {
+          "width": 1024,
+          "height": 768
+        }
+      }
+    },
+    "9": {
+      "gate": {
+        "source": "vision",
+        "category": "type"
+      },
+      "control": {
+        "variable": {
+          "name": "company_name_entry",
+          "kind": "string",
+          "description": "Company name typed into a Google Sheets cell",
+          "defaultStringValue": "Ginkgo Bioworks",
+          "context": "Step 2:\nThe screenshot shows a Google search page with the search query 'YC S25 batch companies list' in the search box. There is a dropdown menu showing search suggestions including 'list 2024', 'list reddit', 'list y combinator', 'list pdf', 'list 2023', 'list', and 'list 2018'. This appears to be searching for Y Combinator startup batch company lists, which would contain multiple company names that could be used as values for the company_name_entry variable.\nStep 3:\nThe screenshot shows Google search results for 'YC S25 batch companies list' with a section titled 'From sources across the web' displaying various company names and logos including: Ginkgo Bioworks, Instacart, Airbnb, Coinbase, Amplitude, GitLab, Notable Labs, Checkr, and Faire. These appear to be Y Combinator portfolio companies that could serve as potential company name entries.\nStep 4:\nThe screenshot shows a Google search results page for 'YC S25 batch companies list'. Under 'From sources across the web', several company names are visible: Ginkgo Bioworks (with a green logo), Instacart, Coinbase, Amplitude, Notable Labs, and Checkr. These appear to be Y Combinator portfolio companies that could serve as examples for company name entries.\nStep 5:\nThe screenshot shows Google search results for 'YC S25 batch companies list'. Several company names are visible in the search results including: Ginkgo Bioworks (which matches the default value), Instacart, Coinbase, Amplitude, Notable Labs, and Checkr. These appear to be Y Combinator portfolio companies that could serve as potential values for the company_name_entry variable.\nStep 6:\nThis is the Google Sheets homepage showing template options for creating new spreadsheets. No company names are visible in any cells or input fields. The templates shown include Blank spreadsheet, To-do list, Annual budget, Monthly budget, and Google Finance Investment tracker. There are no existing spreadsheets or company name entries visible in this interface.\nStep 7:\nCell A1 contains placeholder text 'Type \"@\" then a name to insert a people smart chip' which appears to be instructional text for entering names or company names. The cell is currently selected and shows this guidance text rather than an actual company name entry."
+        },
+        "options": []
+      }
+    }
+  }
+}

@@ -1,6 +1,10 @@
 import { TestFunction, TestGroup, TestOptions } from "@/discovery/types";
 import cuid2 from "@paralleldrive/cuid2";
+<<<<<<< HEAD
 import { getTestWorkerData, postToParent, testFunctions, messageEmitter, TestWorkerIncomingMessage } from "./util";
+=======
+import { getTestWorkerData, postToParent, testFunctions, messageEmitter, TestWorkerIncomingMessage, hooks } from "./util";
+>>>>>>> Bremote/main
 import { TestCaseAgent } from "@/agent";
 import { TestResult, TestState, TestStateTracker } from "@/runner/state";
 import { buildDefaultBrowserAgentOptions } from "magnitude-core";
@@ -28,6 +32,16 @@ export function registerTest(testFn: TestFunction, title: string, url: string) {
     });
 }
 
+<<<<<<< HEAD
+=======
+let beforeAllExecuted = false;
+let beforeAllError: Error | null = null;
+let afterAllExecuted = false;
+let isShuttingDown = false;
+let pendingAfterEach: Set<string> = new Set();
+// No state reset is needed because each test file is run in a separate worker
+
+>>>>>>> Bremote/main
 let currentGroup: TestGroup | undefined;
 export function setCurrentGroup(group?: TestGroup) {
     currentGroup = group;
@@ -38,7 +52,55 @@ export function currentGroupOptions(): TestOptions {
 
 messageEmitter.removeAllListeners('message');
 messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
+<<<<<<< HEAD
     if (message.type !== 'execute') return;
+=======
+    if (message.type === 'graceful_shutdown') {
+        isShuttingDown = true;
+
+        if (pendingAfterEach.size > 0) {
+            try {
+                await Promise.all(
+                    [...pendingAfterEach].map(async (_testId) => {
+                        for (const afterEachHook of hooks.afterEach) {
+                            await afterEachHook();
+                        }
+                    })
+                );
+            } catch (error) {
+                console.error("afterEach hooks failed during graceful shutdown:", error);
+            }
+        }
+
+        if (!afterAllExecuted) {
+            try {
+                for (const afterAllHook of hooks.afterAll) {
+                    await afterAllHook();
+                }
+                afterAllExecuted = true;
+            } catch (error) {
+                console.error("afterAll hook failed during graceful shutdown:\n", error);
+            }
+        }
+
+        postToParent({ type: 'graceful_shutdown_complete' });
+        return;
+    }
+
+
+    if (message.type !== 'execute') return;
+
+    // Don't start new tests if shutting down
+    if (isShuttingDown) {
+        postToParent({
+            type: 'test_error',
+            testId: message.test.id,
+            error: 'Test cancelled due to graceful shutdown'
+        });
+        return;
+    }
+
+>>>>>>> Bremote/main
     const { test, browserOptions, llm, grounding, telemetry } = message;
     const testFn = testFunctions.get(test.id);
 
@@ -85,7 +147,51 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
         let finalResult: TestResult;
 
         try {
+<<<<<<< HEAD
             await testFn(agent);
+=======
+            if (!beforeAllExecuted && hooks.beforeAll.length > 0) {
+                try {
+                    for (const beforeAllHook of hooks.beforeAll) {
+                        await beforeAllHook();
+                    }
+                } catch (error) {
+                    console.error("beforeAll hooks failed:", error);
+                    beforeAllError = error instanceof Error ? error : new Error(String(error));
+                } finally {
+                    beforeAllExecuted = true;
+                }
+            }
+
+            if (beforeAllError) {
+                throw new Error(`beforeAll hook failed: ${beforeAllError.message}`);
+            }
+
+            for (const beforeEachHook of hooks.beforeEach) {
+                try {
+                    await beforeEachHook();
+                } catch (error) {
+                    console.error(`beforeEach hook failed for test '${test.title}':`, error);
+                    throw error;
+                }
+            }
+            pendingAfterEach.add(test.id);
+
+            await testFn(agent);
+
+            if (!isShuttingDown) {
+                pendingAfterEach.delete(test.id);
+                for (const afterEachHook of hooks.afterEach) {
+                    try {
+                        await afterEachHook();
+                    } catch (error) {
+                        console.error(`afterEach hook failed for test '${test.title}':`, error);
+                        throw error;
+                    }
+                }
+            }
+
+>>>>>>> Bremote/main
             finalState = {
                 ...tracker.getState(),
                 status: 'passed' as const,
@@ -94,6 +200,23 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
 
             finalResult = { passed: true };
         } catch (error) {
+<<<<<<< HEAD
+=======
+            if (!isShuttingDown) {
+                pendingAfterEach.delete(test.id);
+                try {
+                    for (const afterEachHook of hooks.afterEach) {
+                        await afterEachHook();
+                    }
+                } catch (afterEachError) {
+                    console.error(`afterEach hook failed for failing test '${test.title}':`, afterEachError);
+                    const originalMessage = error instanceof Error ? error.message : String(error);
+                    const afterEachMessage = afterEachError instanceof Error ? afterEachError.message : String(afterEachError);
+                    error = new Error(`Test failed: ${originalMessage}. Additionally, afterEach hook failed: ${afterEachMessage}`);
+                }
+            }
+
+>>>>>>> Bremote/main
             const failure = {
                 message: error instanceof Error ? error.message : String(error)
             };

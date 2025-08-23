@@ -1,5 +1,74 @@
 # magnitude-test
 
+<<<<<<< HEAD
+=======
+## 0.3.10
+
+### Patch Changes
+
+- Updated dependencies [[`e54e4e1`](https://github.com/magnitudedev/magnitude/commit/e54e4e10ab05b8de593ba97eedf89121a3235971)]:
+  - magnitude-core@0.2.31
+
+## 0.3.9
+
+### Patch Changes
+
+- Updated dependencies [[`c99f62c`](https://github.com/magnitudedev/magnitude/commit/c99f62c644b550c2eee74a42f27a72707c56628f)]:
+  - magnitude-core@0.2.30
+
+## 0.3.8
+
+### Patch Changes
+
+- Updated dependencies [[`870d225`](https://github.com/magnitudedev/magnitude/commit/870d2257c21cef24b4c14938fc20ae23fb369a80)]:
+  - magnitude-core@0.2.29
+
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [[`aa3dadb`](https://github.com/magnitudedev/magnitude/commit/aa3dadb9b4662d610809191b84aa59cb017981f6)]:
+  - magnitude-core@0.2.28
+
+## 0.3.6
+
+### Patch Changes
+
+- [#112](https://github.com/magnitudedev/magnitude/pull/112) [`c568651`](https://github.com/magnitudedev/magnitude/commit/c568651b186bb3fa94f7b3cd7f855f3bfc718762) Thanks [@ewired](https://github.com/ewired)! - Use inferred types for command line options
+
+- [#113](https://github.com/magnitudedev/magnitude/pull/113) [`368405d`](https://github.com/magnitudedev/magnitude/commit/368405ddc045ec4940d32789c9ca488b91b75a2f) Thanks [@ewired](https://github.com/ewired)! - beforeAll/beforeEach/afterEach/afterAll hooks for mag.ts tests. Group-level hooks are coming in a future update.
+
+- Updated dependencies [[`caf39dc`](https://github.com/magnitudedev/magnitude/commit/caf39dcaa9d7715f7b950251abaedecf728bf707)]:
+  - magnitude-core@0.2.27
+
+## 0.3.5
+
+### Patch Changes
+
+- [`6424a0a`](https://github.com/magnitudedev/magnitude/commit/6424a0a8bfe24dc3de292670ccdb47e3f8de0d80) Thanks [@anerli](https://github.com/anerli)! - fix faulty api key check
+
+- Updated dependencies [[`f1ae52e`](https://github.com/magnitudedev/magnitude/commit/f1ae52e7e812434d1b4a5468d0797ca13237d056)]:
+  - magnitude-core@0.2.26
+
+## 0.3.4
+
+### Patch Changes
+
+- [`eef2210`](https://github.com/magnitudedev/magnitude/commit/eef2210f88e37f334fdd2d2d5d76ca66705b768a) Thanks [@ewired](https://github.com/ewired)! - test runner option to continue after failure
+
+- [#103](https://github.com/magnitudedev/magnitude/pull/103) [`d28af95`](https://github.com/magnitudedev/magnitude/commit/d28af95ad94e495017b3b57b27fdfa33e13b782c) Thanks [@ashutosh-rath02](https://github.com/ashutosh-rath02)! - improve api key validation
+
+- Updated dependencies [[`6392151`](https://github.com/magnitudedev/magnitude/commit/6392151921b5f9544441fe9f8acb1d45de165c3d)]:
+  - magnitude-core@0.2.25
+
+## 0.3.3
+
+### Patch Changes
+
+- Updated dependencies [[`5703f04`](https://github.com/magnitudedev/magnitude/commit/5703f0454378197268cdb95d382f0bf8859cd0b3)]:
+  - magnitude-core@0.2.24
+
+>>>>>>> Bremote/main
 ## 0.3.2
 
 ### Patch Changes

@@ -58,10 +58,19 @@ export interface GoogleVertexClient {
     provider: 'vertex-ai',
     options: {
         model: string,
+<<<<<<< HEAD
         location: string,
         baseUrl?: string,
         projectId?: string,
         credentials?: string | object,
+=======
+        location?: string,
+        baseUrl?: string,
+        projectId?: string,
+        credentials?: string | object,
+        // Needed for anthropic models on vertex
+        anthropicVersion?: string
+>>>>>>> Bremote/main
         // passed to generationConfig
         temperature?: number,
     }

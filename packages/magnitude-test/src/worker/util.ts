@@ -9,6 +9,10 @@ import { TestFunction } from "@/discovery/types";
 declare global {
     var __magnitudeTestFunctions: Map<string, TestFunction> | undefined;
     var __magnitudeMessageEmitter: EventEmitter | undefined;
+<<<<<<< HEAD
+=======
+    var __magnitudeTestHooks: TestHooks | undefined;
+>>>>>>> Bremote/main
 }
 
 if (!globalThis.__magnitudeTestFunctions) {
@@ -21,13 +25,40 @@ if (!globalThis.__magnitudeMessageEmitter) {
 }
 export const messageEmitter = globalThis.__magnitudeMessageEmitter;
 
+<<<<<<< HEAD
+=======
+
+export type TestHooks = Record<
+    'beforeAll' | 'afterAll' | 'beforeEach' | 'afterEach',
+    (() => void | Promise<void>)[]
+>;
+
+if (!globalThis.__magnitudeTestHooks) {
+    globalThis.__magnitudeTestHooks = {
+        beforeAll: [],
+        afterAll: [],
+        beforeEach: [],
+        afterEach: [],
+    };
+}
+export const hooks = globalThis.__magnitudeTestHooks;
+
+>>>>>>> Bremote/main
 export type TestWorkerIncomingMessage = {
     type: "execute"
     test: RegisteredTest;
     browserOptions?: BrowserOptions;
+<<<<<<< HEAD
     llm?: LLMClient;
     grounding?: GroundingClient;
     telemetry?: boolean;
+=======
+    llm?: LLMClient | LLMClient[];
+    grounding?: GroundingClient;
+    telemetry?: boolean;
+} | {
+    type: "graceful_shutdown"
+>>>>>>> Bremote/main
 }
 
 export type TestWorkerOutgoingMessage = {
@@ -50,6 +81,11 @@ export type TestWorkerOutgoingMessage = {
     type: "test_state_change";
     testId: string;
     state: TestState;
+<<<<<<< HEAD
+=======
+} | {
+    type: "graceful_shutdown_complete";
+>>>>>>> Bremote/main
 }
 
 export function postToParent(message: TestWorkerOutgoingMessage) {

@@ -1,5 +1,53 @@
 # magnitude-core
 
+## 0.2.31
+
+### Patch Changes
+
+- [`e54e4e1`](https://github.com/magnitudedev/magnitude/commit/e54e4e10ab05b8de593ba97eedf89121a3235971) Thanks [@anerli](https://github.com/anerli)! - add anthropic version config option to vertex
+
+## 0.2.30
+
+### Patch Changes
+
+- [`c99f62c`](https://github.com/magnitudedev/magnitude/commit/c99f62c644b550c2eee74a42f27a72707c56628f) Thanks [@anerli](https://github.com/anerli)! - make location optional in vertex-ai
+
+## 0.2.29
+
+### Patch Changes
+
+- [`870d225`](https://github.com/magnitudedev/magnitude/commit/870d2257c21cef24b4c14938fc20ae23fb369a80) Thanks [@anerli](https://github.com/anerli)! - disable temp config in vertex for now, seems format does not align with expected
+
+## 0.2.28
+
+### Patch Changes
+
+- [`aa3dadb`](https://github.com/magnitudedev/magnitude/commit/aa3dadb9b4662d610809191b84aa59cb017981f6) Thanks [@anerli](https://github.com/anerli)! - throw on failure to get conn observations - prevents potential infinite wait loop if browser closed
+
+## 0.2.27
+
+### Patch Changes
+
+- [`caf39dc`](https://github.com/magnitudedev/magnitude/commit/caf39dcaa9d7715f7b950251abaedecf728bf707) Thanks [@anerli](https://github.com/anerli)! - fix agent hang after stop by cleaning up webharness interval
+
+## 0.2.26
+
+### Patch Changes
+
+- [`f1ae52e`](https://github.com/magnitudedev/magnitude/commit/f1ae52e7e812434d1b4a5468d0797ca13237d056) Thanks [@anerli](https://github.com/anerli)! - retry get full page content in extract
+
+## 0.2.25
+
+### Patch Changes
+
+- [`6392151`](https://github.com/magnitudedev/magnitude/commit/6392151921b5f9544441fe9f8acb1d45de165c3d) Thanks [@anerli](https://github.com/anerli)! - option to disable virtual screen space transform on each harness op
+
+## 0.2.24
+
+### Patch Changes
+
+- [`5703f04`](https://github.com/magnitudedev/magnitude/commit/5703f0454378197268cdb95d382f0bf8859cd0b3) Thanks [@anerli](https://github.com/anerli)! - improve tab tracking, make page tracking work for general interactions
+
 ## 0.2.23
 
 ### Patch Changes
