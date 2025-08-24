@@ -1,0 +1,185 @@
+{
+  "metadata": {
+    "name": "demo-workflow",
+    "startUrl": "https://google.com",
+    "browser": {
+      "mode": "cdp",
+      "cdpUrl": "ws://localhost:9222/devtools/browser/b53ec12e-42cb-4237-871a-8532e71fd7dd",
+      "contextOptions": {
+        "viewport": {
+          "width": 1280,
+          "height": 800
+        },
+        "deviceScaleFactor": 2
+      }
+    },
+    "virtualScreenDimensions": {
+      "width": 1024,
+      "height": 768
+    },
+    "createdAt": "2025-08-23T02:41:06.403Z",
+    "workflowVersion": 1
+  },
+  "steps": [
+    {
+      "kind": "click",
+      "x": 511,
+      "y": 328
+    },
+    {
+      "kind": "click",
+      "x": 356,
+      "y": 373
+    },
+    {
+      "kind": "click",
+      "x": 958,
+      "y": 51
+    },
+    {
+      "kind": "scroll",
+      "x": 855,
+      "y": 400,
+      "deltaX": 0,
+      "deltaY": 200
+    },
+    {
+      "kind": "click",
+      "x": 779,
+      "y": 337
+    },
+    {
+      "kind": "click",
+      "x": 208,
+      "y": 197
+    },
+    {
+      "kind": "click",
+      "x": 988,
+      "y": 35
+    },
+    {
+      "kind": "type",
+      "content": "Ginkgo Bioworks"
+    },
+    {
+      "kind": "enter"
+    }
+  ],
+  "generalizations": {
+    "4": {
+      "gate": {
+        "source": "vision",
+        "category": "menu"
+      },
+      "control": {
+        "variable": {
+          "name": "googleApp",
+          "kind": "string"
+        },
+        "options": [
+          {
+            "id": "Search",
+            "displayLabel": "Search",
+            "clickPoint": {
+              "x": 779,
+              "y": 171
+            }
+          },
+          {
+            "id": "Calendar",
+            "displayLabel": "Calendar",
+            "clickPoint": {
+              "x": 855,
+              "y": 171
+            }
+          },
+          {
+            "id": "News",
+            "displayLabel": "News",
+            "clickPoint": {
+              "x": 931,
+              "y": 171
+            }
+          },
+          {
+            "id": "Photos",
+            "displayLabel": "Photos",
+            "clickPoint": {
+              "x": 779,
+              "y": 265
+            }
+          },
+          {
+            "id": "Meet",
+            "displayLabel": "Meet",
+            "clickPoint": {
+              "x": 855,
+              "y": 265
+            }
+          },
+          {
+            "id": "Translate",
+            "displayLabel": "Translate",
+            "clickPoint": {
+              "x": 931,
+              "y": 265
+            }
+          },
+          {
+            "id": "Sheets",
+            "displayLabel": "Sheets",
+            "clickPoint": {
+              "x": 779,
+              "y": 360
+            }
+          },
+          {
+            "id": "Docs",
+            "displayLabel": "Docs",
+            "clickPoint": {
+              "x": 855,
+              "y": 360
+            }
+          },
+          {
+            "id": "Slides",
+            "displayLabel": "Slides",
+            "clickPoint": {
+              "x": 931,
+              "y": 359
+            }
+          },
+          {
+            "id": "Google One",
+            "displayLabel": "Google One",
+            "clickPoint": {
+              "x": 779,
+              "y": 454
+            }
+          }
+        ],
+        "imageSize": {
+          "width": 1024,
+          "height": 768
+        }
+      }
+    },
+    "7": {
+      "gate": {
+        "source": "vision",
+        "category": "type"
+      },
+      "control": {
+        "variable": {
+          "name": "excel_cell_content",
+          "kind": "string",
+          "description": "Text content to be typed into an Excel spreadsheet cell",
+          "defaultStringValue": "Ginkgo Bioworks",
+          "context": "Step 2:\nGinkgo Bioworks\nInstacart\nAirbnb\nCoinbase\nAmplitude\nGitLab\nNotable Labs\nCheckr\nFaire\nStep 3:\nStep 4:"
+        },
+        "options": []
+      }
+    }
+  }
+}

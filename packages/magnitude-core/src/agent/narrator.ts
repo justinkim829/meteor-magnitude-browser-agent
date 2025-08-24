@@ -56,11 +56,8 @@ export function narrateAgent(agent: Agent) {
     agent.events.on('actionStarted', (action: Action) => {
         const actionDefinition = agent.identifyAction(action);
         console.log(bold`  ${actionDefinition.render(action)}`);
-<<<<<<< HEAD
         // Do NOT re-emit action renders as 'thought'. Only pure reasoning
         // should be emitted as thoughts; action logs are kept to console.
-=======
->>>>>>> Bremote/main
     });
 }
 

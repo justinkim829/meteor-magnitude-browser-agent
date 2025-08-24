@@ -19,11 +19,7 @@ export interface WebServerConfig {
 export type MagnitudeConfig = {
     //apiKey?: string;
     url: string; // base URL used as default, required
-<<<<<<< HEAD
-    llm?: LLMClient,
-=======
     llm?: LLMClient | LLMClient[],
->>>>>>> Bremote/main
     grounding?: GroundingClient,
     webServer?: WebServerConfig | WebServerConfig[],
     // browser?: {
@@ -32,10 +28,7 @@ export type MagnitudeConfig = {
     // },
     browser?: BrowserOptions,
     telemetry?: boolean,
-<<<<<<< HEAD
-=======
     continueAfterFailure?: boolean,
->>>>>>> Bremote/main
     display?: {
         showActions?: boolean;
     }

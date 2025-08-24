@@ -4,7 +4,7 @@
     "startUrl": "https://google.com",
     "browser": {
       "mode": "cdp",
-      "cdpUrl": "ws://localhost:9222/devtools/browser/62c23669-e0ca-4ae4-8be3-b4fa7d01b2e3",
+      "cdpUrl": "ws://localhost:9222/devtools/browser/b53ec12e-42cb-4237-871a-8532e71fd7dd",
       "contextOptions": {
         "viewport": {
           "width": 1280,
@@ -17,7 +17,7 @@
       "width": 1024,
       "height": 768
     },
-    "createdAt": "2025-08-16T22:08:48.021Z",
+    "createdAt": "2025-08-23T02:41:06.403Z",
     "workflowVersion": 1
   },
   "steps": [
@@ -27,15 +27,13 @@
       "y": 328
     },
     {
-      "kind": "type",
-      "content": "YC S25 batch companies list"
-    },
-    {
-      "kind": "enter"
+      "kind": "click",
+      "x": 356,
+      "y": 373
     },
     {
       "kind": "click",
-      "x": 961,
+      "x": 958,
       "y": 51
     },
     {
@@ -58,16 +56,14 @@
     {
       "kind": "click",
       "x": 988,
-      "y": 92
-    },
-    {
-      "kind": "click",
-      "x": 988,
-      "y": 92
+      "y": 35
     },
     {
       "kind": "type",
       "content": "Ginkgo Bioworks"
+    },
+    {
+      "kind": "enter"
     }
   ]
 }

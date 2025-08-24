@@ -200,11 +200,7 @@ export const newTabAction = createAction({
     resolver: async ({ agent }) => {
         const webConnector = agent.require(BrowserConnector);
         const harness = webConnector.getHarness();
-<<<<<<< HEAD
         await harness.newBackgroundTab();
-=======
-        await harness.newTab();
->>>>>>> Bremote/main
     },
     render: () => `⊞ open new tab`
 });

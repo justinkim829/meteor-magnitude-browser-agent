@@ -18,8 +18,14 @@ import { chromium } from 'playwright';
 import { EventEmitter } from 'events';
 import net from 'net';
 import crypto from 'crypto';
+import fs from 'fs';
+import {promises as fsp} from 'fs';
+import { createRequire } from 'node:module';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+// Use dist CJS for recorder/player to match existing CLI utilities
+const mcCore = require('./packages/magnitude-core/dist/index.cjs');
 
 // Direct hardcoded API keys - no external dependencies
 let cachedSecrets = {
@@ -41,6 +47,75 @@ dotenv.config({ path: join(__dirname, '.env') });
 
 const app = express();
 app.use(bodyParser.json({ limit: '50mb' }));
+// Minimal CORS for chrome:// UI; adjust origin check if needed
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// Workflows storage
+const WORKFLOWS_DIR = process.env.WORKFLOWS_DIR || process.env.MAGNITUDE_WORKFLOWS_DIR || join(__dirname, 'workflows');
+const WORKFLOWS_INDEX = join(WORKFLOWS_DIR, 'workflows_index.json');
+try { fs.mkdirSync(WORKFLOWS_DIR, { recursive: true }); } catch {}
+
+async function readJsonSafe(filePath) {
+  try { const txt = await fsp.readFile(filePath, 'utf8'); return JSON.parse(txt); } catch { return null; }
+}
+
+async function loadWorkflowIndex() {
+  const idx = await readJsonSafe(WORKFLOWS_INDEX);
+  return idx && typeof idx === 'object' ? idx : {};
+}
+
+async function saveWorkflowIndex(indexObj) {
+  try {
+    await fsp.writeFile(WORKFLOWS_INDEX, JSON.stringify(indexObj, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[Workflows] Failed to save index:', e?.message);
+  }
+}
+
+function workflowIdFromFile(fileName) {
+  return fileName.endsWith('.workflow.json') ? fileName.slice(0, -('.workflow.json'.length)) : fileName;
+}
+
+// Retention: keep at most N workflows (default 200)
+const WORKFLOWS_RETENTION = Number(process.env.WORKFLOWS_RETENTION || 200);
+async function enforceWorkflowRetention() {
+  try {
+    const files = await fsp.readdir(WORKFLOWS_DIR);
+    const wfFiles = files.filter(f => f.endsWith('.workflow.json'));
+    if (wfFiles.length <= WORKFLOWS_RETENTION) return;
+    // sort by mtime desc, keep newest N
+    const withTimes = await Promise.all(wfFiles.map(async f => {
+      const full = join(WORKFLOWS_DIR, f);
+      const st = await fsp.stat(full);
+      return { f, t: st.mtime.getTime() };
+    }));
+    withTimes.sort((a, b) => b.t - a.t);
+    const toDelete = withTimes.slice(WORKFLOWS_RETENTION);
+    if (toDelete.length > 0) {
+      console.log('[Workflows] Retention: pruning old workflows', { count: toDelete.length });
+    }
+    for (const item of toDelete) {
+      const wf = join(WORKFLOWS_DIR, item.f);
+      const mem = wf.replace(/\.workflow\.json$/, '.memory.json');
+      const gen = wf.replace(/\.workflow\.json$/, '.generalized.workflow.json');
+      try { await fsp.unlink(wf); } catch {}
+      try { await fsp.unlink(mem); } catch {}
+      try { await fsp.unlink(gen); } catch {}
+      const id = workflowIdFromFile(item.f);
+      const idx = await loadWorkflowIndex();
+      delete idx[id];
+      await saveWorkflowIndex(idx);
+    }
+  } catch (e) {
+    console.warn('[Workflows] Retention enforcement failed:', e?.message);
+  }
+}
 
 // Request logging middleware
 const requestLogger = (req, res, next) => {
@@ -1687,10 +1762,34 @@ app.post('/mcp/execute', async (req, res) => {
       }
     };
     
+    // Recorder wiring
+    let recorder = null;
+    let harness = null;
+    let savedWorkflowPath = null;
     try {
       // Create a new browser agent for this task (opens new tab)
       const browserAgent = await createBrowserAgentForTask(taskId, browser_instance_id);
       browserAgents.set(taskId, browserAgent);
+
+      // Initialize workflow recorder (non-fatal on error)
+      try {
+        harness = browserAgent.require(mcCore.BrowserConnector).getHarness();
+        const name = (typeof task === 'string' && task.trim()) ? task.trim().slice(0, 80) : 'untitled';
+        const startUrl = (url && typeof url === 'string') ? url : (browserAgent.page && typeof browserAgent.page.url === 'function' ? browserAgent.page.url() : '');
+        recorder = new mcCore.WorkflowRecorder({
+          name,
+          startUrl,
+          browser: { mode: 'cdp', cdpUrl: FIXED_CDP_URL, contextOptions: { viewport: { width: 1280, height: 720 } } },
+          virtualScreenDimensions: { width: 1024, height: 768 }
+        });
+        const onStep = (step) => { try { recorder && recorder.record(step); } catch {} };
+        harness.events.on('stepRecorded', onStep);
+        // Stash unsubscriber for finally
+        recorder.__onStep = onStep;
+        console.log('[Workflows] Recording started', { taskId, name, startUrl });
+      } catch (e) {
+        console.warn('[Workflows] Recorder initialization failed:', e?.message);
+      }
       
       // Detect an explicit "done" signal and immediately surface a task_complete node once
       let doneEventSent = false;
@@ -1821,11 +1920,80 @@ app.post('/mcp/execute', async (req, res) => {
           doneEventSent = true;
         }
       } catch (_) {}
-      // Request backend to summarize this task with objective and timeline
+      
+      // Queue summary for the user BEFORE any persistence/generalization work
       try {
         const summaryPrompt = buildSummaryRequestMessage(task, taskQueue, 'completed');
         taskQueue.addEvent('summary_request', summaryPrompt);
       } catch (_) {}
+
+      // Save workflow and memory (runs after summary_request is queued)
+      try {
+        if (recorder) {
+          savedWorkflowPath = await recorder.save(WORKFLOWS_DIR);
+          console.log('[Workflows] Saved workflow', { path: savedWorkflowPath });
+          // Save memory alongside
+          try {
+            const mem = await browserAgent.memory.toJSON();
+            const memPath = savedWorkflowPath.replace(/\.workflow\.json$/, '.memory.json');
+            await fsp.writeFile(memPath, JSON.stringify(mem, null, 2), 'utf8');
+          } catch (e) {
+            console.warn('[Workflows] Failed to save memory:', e?.message);
+          }
+          // Index update and autogeneralize
+          try {
+            const index = await loadWorkflowIndex();
+            const id = workflowIdFromFile(savedWorkflowPath.split('/').pop());
+            index[id] = index[id] || {};
+            const wfMetaName = typeof recorder?.getWorkflow === 'function'
+              ? recorder.getWorkflow().metadata?.name
+              : undefined;
+            if (wfMetaName && typeof wfMetaName === 'string' && wfMetaName.trim()) {
+              index[id].name = wfMetaName.trim().slice(0, 120);
+            } else if (!index[id].name) {
+              index[id].name = 'untitled';
+            }
+            index[id].starred = Boolean(index[id].starred);
+
+            // Attempt autogeneralize using the live agent and recorded workflow
+            try {
+              const wfObj = typeof recorder?.getWorkflow === 'function' ? recorder.getWorkflow() : null;
+              if (wfObj) {
+                const gens = await mcCore.generateGeneralizations(browserAgent, wfObj);
+                if (gens && Object.keys(gens).length > 0) {
+                  const gwf = mcCore.attachGeneralizationsToWorkflow(wfObj, gens);
+                  const genPath = savedWorkflowPath.replace(/\.workflow\.json$/, '.generalized.workflow.json');
+                  await fsp.writeFile(genPath, JSON.stringify(gwf, null, 2), 'utf8');
+                  // Extract variable names for index summary
+                  let varNames = [];
+                  if (Array.isArray(gwf.variables)) {
+                    varNames = gwf.variables.map(v => v && v.name).filter(Boolean);
+                  }
+                  if ((!varNames || varNames.length === 0) && gwf.generalizations && typeof gwf.generalizations === 'object') {
+                    try {
+                      varNames = Object.values(gwf.generalizations).map(g => g && g.control && g.control.variable && g.control.variable.name).filter(Boolean);
+                    } catch {}
+                  }
+                  index[id].hasGeneralized = true;
+                  if (varNames && varNames.length) index[id].variables = varNames.slice(0, 12);
+                  console.log('[Workflows] Autogeneralized workflow', { id, variables: varNames.length });
+                } else {
+                  index[id].hasGeneralized = false;
+                }
+              }
+            } catch (ge) {
+              console.warn('[Workflows] Autogeneralize skipped:', ge?.message);
+            }
+
+            await saveWorkflowIndex(index);
+          } catch {}
+          // Retention guard
+          await enforceWorkflowRetention();
+        }
+      } catch (e) {
+        console.warn('[Workflows] Failed to persist workflow:', e?.message);
+      }
+      // (summary already queued above)
       // Remove any cursor overlays from all pages now that the task is complete
       try {
         await removeCursorFromAllPagesForAgent(browserAgent);
@@ -1893,6 +2061,13 @@ app.post('/mcp/execute', async (req, res) => {
           await removeCursorFromAllPagesForAgent(agentToClean);
         } catch (_) {}
       }
+    } finally {
+      // Detach recorder listener if set
+      try {
+        if (harness && recorder && recorder.__onStep) {
+          harness.events.off('stepRecorded', recorder.__onStep);
+        }
+      } catch {}
     }
   })();
 });
@@ -2035,6 +2210,233 @@ app.get('/mcp/tools', (req, res) => {
   ];
   
   res.json({ tools });
+});
+
+// -------- Workflows endpoints --------
+// List workflows
+app.get('/mcp/workflows', async (_req, res) => {
+  try {
+    const files = await fsp.readdir(WORKFLOWS_DIR);
+    const list = [];
+    for (const name of files) {
+      if (!name.endsWith('.workflow.json')) continue;
+      // Exclude generalized companions from the main list; they are surfaced via hasGeneralized + variables
+      if (name.endsWith('.generalized.workflow.json')) continue;
+      const id = workflowIdFromFile(name);
+      const full = join(WORKFLOWS_DIR, name);
+      const stat = await fsp.stat(full);
+      const wf = await readJsonSafe(full);
+      const index = await loadWorkflowIndex();
+      list.push({
+        id,
+        name: (index[id]?.name) || (wf?.metadata?.name) || id,
+        createdAt: wf?.metadata?.createdAt || stat.mtime.toISOString(),
+        steps: Array.isArray(wf?.steps) ? wf.steps.length : 0,
+        hasMemory: fs.existsSync(full.replace(/\.workflow\.json$/, '.memory.json')),
+        size: stat.size,
+        hasGeneralized: Boolean(index[id]?.hasGeneralized) || fs.existsSync(full.replace(/\.workflow\.json$/, '.generalized.workflow.json')),
+        variables: Array.isArray(index[id]?.variables) ? index[id].variables : undefined
+      });
+    }
+    // sort newest first
+    list.sort((a, b) => (new Date(b.createdAt).getTime()) - (new Date(a.createdAt).getTime()));
+    res.json({ success: true, workflows: list });
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Get single workflow
+app.get('/mcp/workflows/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const pathWf = join(WORKFLOWS_DIR, `${id}.workflow.json`);
+    const wf = await readJsonSafe(pathWf);
+    if (!wf) return res.status(404).json({ success: false, error: 'Not found' });
+    const mem = await readJsonSafe(pathWf.replace(/\.workflow\.json$/, '.memory.json'));
+    res.json({ success: true, workflow: wf, memory: Boolean(mem) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Get generalized workflow info (existence + variables)
+app.get('/mcp/workflows/:id/generalized', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const pathWf = join(WORKFLOWS_DIR, `${id}.generalized.workflow.json`);
+    const gwf = await readJsonSafe(pathWf);
+    if (!gwf) {
+      return res.json({ success: true, exists: false, variables: [] });
+    }
+    // Build a user-friendly schema: [{ name, kind, description?, defaultStringValue?, options?: [string] }]
+    const byName = new Map();
+    const addVar = (vName, vKind, vDesc, vDefault, optionLabels) => {
+      if (!vName) return;
+      if (!byName.has(vName)) {
+        byName.set(vName, {
+          name: String(vName),
+          kind: String(vKind || 'string'),
+          ...(vDesc ? { description: String(vDesc) } : {}),
+          ...(vDefault ? { defaultStringValue: String(vDefault) } : {}),
+          ...(Array.isArray(optionLabels) && optionLabels.length ? { options: Array.from(new Set(optionLabels.map(String))) } : {})
+        });
+      } else {
+        const cur = byName.get(vName);
+        if (vDesc && !cur.description) cur.description = String(vDesc);
+        if (vDefault && !cur.defaultStringValue) cur.defaultStringValue = String(vDefault);
+        if (Array.isArray(optionLabels) && optionLabels.length) {
+          const set = new Set(cur.options || []);
+          for (const lbl of optionLabels) set.add(String(lbl));
+          cur.options = Array.from(set);
+        }
+      }
+    };
+
+    if (gwf && gwf.generalizations && typeof gwf.generalizations === 'object') {
+      for (const g of Object.values(gwf.generalizations)) {
+        try {
+          const variable = g && g.control && g.control.variable ? g.control.variable : null;
+          const name = variable && variable.name;
+          const kind = (variable && variable.kind) || 'string';
+          const desc = variable && variable.description;
+          const def = variable && variable.defaultStringValue;
+          const options = (g && g.control && Array.isArray(g.control.options)) ? g.control.options.map(o => o && (o.displayLabel || o.id)).filter(Boolean) : [];
+          addVar(name, kind, desc, def, options);
+        } catch {}
+      }
+    }
+    // Some generalized workflows may also include a top-level variables array
+    if (Array.isArray(gwf.variables)) {
+      for (const v of gwf.variables) {
+        try { addVar(v && v.name, (v && v.kind) || 'string', v && v.description, v && v.defaultStringValue, Array.isArray(v.options) ? v.options : []); } catch {}
+      }
+    }
+    const variables = Array.from(byName.values());
+    try { console.log('[Workflows] Generalized schema', { id, variables: variables.length }); } catch {}
+    res.json({ success: true, exists: true, variables });
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Replay generalized workflow with variable overrides
+app.post('/mcp/workflows/:id/replay-generalized', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const pathWf = join(WORKFLOWS_DIR, `${id}.generalized.workflow.json`);
+    const gwf = await readJsonSafe(pathWf);
+    if (!gwf) return res.status(404).json({ success: false, error: 'Generalized workflow not found' });
+    const variables = (req.body && typeof req.body === 'object') ? (req.body.variables || {}) : {};
+
+    const taskId = taskIdCounter++;
+    console.log('[Workflows] Replay generalized requested', { id, taskId, overrideVars: Object.keys(variables || {}).length });
+    res.json({ success: true, taskId });
+
+    (async () => {
+      const taskQueue = new TaskEventQueue(taskId);
+      taskEventQueues.set(taskId, taskQueue);
+      try {
+        const browserAgent = await createBrowserAgentForTask(taskId, req.body?.browser_instance_id || null);
+        browserAgents.set(taskId, browserAgent);
+        const harness = browserAgent.require(mcCore.BrowserConnector).getHarness();
+        const player = new mcCore.WorkflowPlayer(harness);
+        await player.play(gwf, { variables, autoGeneralize: false, agentForGeneralize: browserAgent });
+        taskQueue.addEvent('task_complete', 'Generalized workflow replay completed');
+        const agentData = browserAgents.get(taskId) || {};
+        agentData.status = 'completed';
+        browserAgents.set(taskId, agentData);
+        console.log('[Workflows] Replay generalized completed', { id, taskId });
+      } catch (e) {
+        taskQueue.addEvent('error', String(e?.message || e));
+        const agentData = browserAgents.get(taskId) || {};
+        agentData.status = 'error';
+        agentData.error = String(e?.message || e);
+        browserAgents.set(taskId, agentData);
+        console.error('[Workflows] Replay generalized failed', { id, taskId, error: String(e?.message || e) });
+      }
+    })();
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Delete workflow
+app.delete('/mcp/workflows/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const wf = join(WORKFLOWS_DIR, `${id}.workflow.json`);
+    const mem = wf.replace(/\.workflow\.json$/, '.memory.json');
+    const gen = wf.replace(/\.workflow\.json$/, '.generalized\.workflow\.json');
+    try { await fsp.unlink(wf); } catch {}
+    try { await fsp.unlink(mem); } catch {}
+    try { await fsp.unlink(gen); } catch {}
+    const idx = await loadWorkflowIndex();
+    delete idx[id];
+    await saveWorkflowIndex(idx);
+    console.log('[Workflows] Deleted workflow', { id });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Patch workflow (rename, star)
+app.patch('/mcp/workflows/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const { name, starred } = req.body || {};
+    const idx = await loadWorkflowIndex();
+    idx[id] = idx[id] || {};
+    if (typeof name === 'string') idx[id].name = name.slice(0, 120);
+    if (typeof starred === 'boolean') idx[id].starred = starred;
+    await saveWorkflowIndex(idx);
+    console.log('[Workflows] Updated workflow', { id, renamed: typeof name === 'string', starred });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Replay workflow (secure CDP path is reused inside agent creation)
+app.post('/mcp/workflows/:id/replay', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const pathWf = join(WORKFLOWS_DIR, `${id}.workflow.json`);
+    const wf = await readJsonSafe(pathWf);
+    if (!wf) return res.status(404).json({ success: false, error: 'Not found' });
+
+    const taskId = taskIdCounter++;
+    console.log('[Workflows] Replay requested', { id, taskId });
+    res.json({ success: true, taskId });
+
+    // async execution
+    (async () => {
+      const taskQueue = new TaskEventQueue(taskId);
+      taskEventQueues.set(taskId, taskQueue);
+      try {
+        const browserAgent = await createBrowserAgentForTask(taskId, req.body?.browser_instance_id || null);
+        browserAgents.set(taskId, browserAgent);
+        const harness = browserAgent.require(mcCore.BrowserConnector).getHarness();
+        const player = new mcCore.WorkflowPlayer(harness);
+        await player.play(wf, { autoGeneralize: false, agentForGeneralize: browserAgent });
+        taskQueue.addEvent('task_complete', 'Workflow replay completed');
+        const agentData = browserAgents.get(taskId) || {};
+        agentData.status = 'completed';
+        browserAgents.set(taskId, agentData);
+        console.log('[Workflows] Replay completed', { id, taskId });
+      } catch (e) {
+        taskQueue.addEvent('error', String(e?.message || e));
+        const agentData = browserAgents.get(taskId) || {};
+        agentData.status = 'error';
+        agentData.error = String(e?.message || e);
+        browserAgents.set(taskId, agentData);
+        console.error('[Workflows] Replay failed', { id, taskId, error: String(e?.message || e) });
+      }
+    })();
+  } catch (e) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
 });
 
 // Helper function to create Zod schema from object

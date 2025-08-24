@@ -1,7 +1,12 @@
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const core = require('./packages/magnitude-core/dist/index.cjs');
 const { WorkflowRecorder, WorkflowPlayer } = core;
-const path = require('node:path');
-const fs = require('node:fs');
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function getWsUrl() {
   const res = await fetch('http://localhost:9222/json/version');

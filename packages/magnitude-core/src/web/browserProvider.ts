@@ -120,7 +120,6 @@ export class BrowserProvider {
         const contextOptions = {
             ...DEFAULT_BROWSER_CONTEXT_OPTIONS,
             deviceScaleFactor: dpr,
-<<<<<<< HEAD
             // Do NOT force a color scheme; respect the user's system/browser theme.
             ...(options && 'contextOptions' in options && options.contextOptions ? options.contextOptions : {})
         };
@@ -130,14 +129,6 @@ export class BrowserProvider {
         options = { ...options, contextOptions };
 
         if (options && process.env.MAGNTIUDE_PLAYGROUND) {
-=======
-            ...(options && 'contextOptions' in options && options.contextOptions ? options.contextOptions : {})//options.browser?.contextOptions
-        };
-
-        options = { ...options, contextOptions };
-
-        if (process.env.MAGNTIUDE_PLAYGROUND) {
->>>>>>> Bremote/main
             // this.logger.trace("MAGNITUDE_PLAYGROUND environment detected, connecting to browser via CDP");
             // Playground environment - force use CDP on 9222
             //const browser = await chromium.connectOverCDP('http://localhost:9222');
@@ -158,7 +149,6 @@ export class BrowserProvider {
             };
         }
         
-<<<<<<< HEAD
         if (options && 'cdp' in options) {
             // Parse CDP URL to handle secure tokens properly
             const cdpUrl = new URL(options.cdp);
@@ -223,42 +213,23 @@ export class BrowserProvider {
                 }
             }
         } else if (options && 'instance' in options) {
-=======
-        if ('cdp' in options) {
-            const browser = await chromium.connectOverCDP(options.cdp);
-            if (browser.contexts().length > 0) {
-                return browser.contexts()[0];
-            } else {
-                return browser.newContext(options.contextOptions);
-            }
-        } else if ('instance' in options) {
->>>>>>> Bremote/main
             const browser = options.instance;
             if (browser.contexts().length > 0) {
                 return browser.contexts()[0];
             } else {
                 return browser.newContext(options.contextOptions);
             }
-<<<<<<< HEAD
         } else if (options && 'launchOptions' in options) {
-=======
-        } else if ('launchOptions' in options) {
->>>>>>> Bremote/main
             this.logger.trace('Creating context with custom launch options');
             return await this._createAndTrackContext(options);
         } else {
             // contextOptions might be passed but no instance | cdp | launchOptions
             this.logger.trace('Creating context for default browser options');
-<<<<<<< HEAD
             return await this._createAndTrackContext(options || {});
-=======
-            return await this._createAndTrackContext(options);
->>>>>>> Bremote/main
         }
     }
 
     private async _applyEmulationSettings(cdpSession: CDPSession, width: number, height: number, deviceScaleFactor: number) {
-<<<<<<< HEAD
         console.log('[MAGNITUDE] Applying emulation settings - clearing all emulation to preserve user dark mode');
         
         // Clear all emulation settings that could affect color scheme BEFORE setting device metrics
@@ -270,8 +241,6 @@ export class BrowserProvider {
             console.log('[MAGNITUDE] Failed to clear some emulation settings before device metrics:', e);
         }
         
-=======
->>>>>>> Bremote/main
         await cdpSession.send('Emulation.setDeviceMetricsOverride', {
             width: width,
             height: height,
@@ -283,7 +252,6 @@ export class BrowserProvider {
             positionY: 0,
             screenOrientation: { angle: 0, type: 'portraitPrimary' }
         });
-<<<<<<< HEAD
         
         // Clear color-scheme emulation AGAIN after setting device metrics
         try {
@@ -293,7 +261,5 @@ export class BrowserProvider {
         } catch (e) {
             console.log('[MAGNITUDE] Failed to clear some emulation settings after device metrics:', e);
         }
-=======
->>>>>>> Bremote/main
     }
 }

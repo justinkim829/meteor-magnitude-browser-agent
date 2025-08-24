@@ -103,11 +103,7 @@ async function buildJsonPartsRecursive(
         return;
     }
 
-<<<<<<< HEAD
-    throw new Error(`Object type not supported for JSON rendering: ${typeof data}`);
-=======
     throw new Error(`Object type not supported for JSON rendering: '${typeof data}'. Data: ${data}`);
->>>>>>> Bremote/main
 }
 
 export async function renderJsonParts(data: RenderableContent, indent: number): Promise<MultiMediaContentPart[]> {

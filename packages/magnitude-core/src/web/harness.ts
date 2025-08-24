@@ -16,18 +16,12 @@ export interface WebHarnessOptions {
     // Some LLM operate best on certain screen dims
     virtualScreenDimensions?: { width: number, height: number }
     visuals?: ActionVisualizerOptions
-<<<<<<< HEAD
-=======
     switchTabsOnActivity?: boolean  // Whether to automatically switch tabs when user activity is detected vs only if switchTab is used
->>>>>>> Bremote/main
 }
 
 export interface WebHarnessEvents {
     'activePageChanged': (page: Page) => Promise<void>;
-<<<<<<< HEAD
-=======
     'stepRecorded': (step: import('@/workflows/types').WorkflowStep) => void;
->>>>>>> Bremote/main
 }
 
 export class WebHarness { // implements StateComponent
@@ -45,25 +39,17 @@ export class WebHarness { // implements StateComponent
     public readonly events: EventEmitter<WebHarnessEvents> = new EventEmitter();
 
     constructor(context: BrowserContext, options: WebHarnessOptions = {}) {
-<<<<<<< HEAD
         console.log('🔍 DEBUG: WebHarness constructor called');
         console.log(`🔍 DEBUG: Context has ${context.pages().length} existing pages`);
-=======
->>>>>>> Bremote/main
         //this.page = page;
         this.context = context;
         this.options = options;
         this.stability = new PageStabilityAnalyzer({ disableVisualStability: true });
         this.visualizer = new ActionVisualizer(this.context, this.options.visuals ?? {});
         this.transformer = new DOMTransformer();
-<<<<<<< HEAD
-        this.tabs = new TabManager(context);
-        console.log('🔍 DEBUG: WebHarness constructor completed');
-=======
         this.tabs = new TabManager(context, {
             switchOnActivity: options.switchTabsOnActivity ?? true
         });
->>>>>>> Bremote/main
 
         // this.context.on('page', (page: Page) => {
         //     this.setActivePage(page);
@@ -80,10 +66,7 @@ export class WebHarness { // implements StateComponent
     }
 
     async setActivePage(page: Page) {
-<<<<<<< HEAD
-=======
         logger.trace(`WebHarness active page: ${page.url()}`);
->>>>>>> Bremote/main
         this.stability.setActivePage(page);
         await this.visualizer.setActivePage(page);
         this.transformer.setActivePage(page);
@@ -101,7 +84,6 @@ export class WebHarness { // implements StateComponent
     // }
 
     async start() {
-<<<<<<< HEAD
         console.log('🔍 DEBUG: ===== WebHarness.start() CALLED =====');
         // Do NOT create a new tab here. Attach to an existing page created externally (C++/CDP).
         const existingPages = this.context.pages();
@@ -164,25 +146,6 @@ export class WebHarness { // implements StateComponent
         } else {
             logger.error('WebHarness: ERROR - No active page found!');
         }
-=======
-        // Initialize tab manager first
-        await this.tabs.initialize();
-        
-        if (this.context.pages().length > 0) {
-            // If context already contains a page, set it as active
-            this.tabs.setActivePage(this.context.pages()[0]);
-        } else {
-            const page = await this.context.newPage();
-            // Force the initial page to be set as active and emit tabChanged
-            this.tabs.setActivePage(page);
-        }
-        await this.visualizer.setup();
-    }
-
-    async stop() {
-        // Clean up tab manager resources
-        this.tabs.destroy();
->>>>>>> Bremote/main
     }
 
     get page() {
@@ -193,20 +156,6 @@ export class WebHarness { // implements StateComponent
         /**
          * Get b64 encoded string of screenshot (PNG) with screen dimensions
          */
-<<<<<<< HEAD
-        const dpr = await this.page.evaluate(() => window.devicePixelRatio);
-        //console.log("DPR:", dpr);
-        //const viewportSize = this.page.viewportSize();
-        const buffer = await this.page.screenshot({ type: 'png', ...options }, );
-
-        // if (!viewportSize) {
-        //     throw Error("Invalid viewport for screenshot");
-        // }
-
-        const base64data = buffer.toString('base64');
-
-        //console.log("Screenshot DATA:", base64data.substring(0, 100));
-=======
         
         // Target page, context or browser has been closed
         
@@ -236,7 +185,6 @@ export class WebHarness { // implements StateComponent
         }
         const base64data = buffer.toString('base64');
 
->>>>>>> Bremote/main
         const image = Image.fromBase64(base64data);
 
         // Now, need to rescale the image based on DPR. This is so that:
@@ -244,26 +192,8 @@ export class WebHarness { // implements StateComponent
         // (2) More importantly, clicks happen in the standard resolution space, so need to do this for coordinates to be correct
         //     for any agent not using a virtual screen space (e.g. those that aren't Claude)
         const { width, height } = await image.getDimensions();
-<<<<<<< HEAD
-        //console.log("Original screenshot dims:", { width, height });
-        //console.log("DPR-scaled dims:", { width: width / dpr, height: height / dpr });
-        const rescaledImage = await image.resize(width / dpr, height / dpr);
-        //console.log("screenshot() final dims:", await rescaledImage.getDimensions());
-
-        //console.log("_locateTarget dims:", await screenshot.getDimensions());
-        return rescaledImage;
-
-        // return {
-        //     image: `data:image/png;base64,${base64data}`,//buffer.toString('base64'),
-        //     dimensions: {
-        //         width: viewportSize.width,
-        //         height: viewportSize.height
-        //     }
-        // };
-=======
         const rescaledImage = await image.resize(width / dpr, height / dpr);
         return rescaledImage;
->>>>>>> Bremote/main
     }
  
     // async goto(url: string) {
@@ -319,14 +249,9 @@ export class WebHarness { // implements StateComponent
         };
     }
 
-<<<<<<< HEAD
-    async click({ x, y }: { x: number, y: number }) {
-        ({ x, y } = await this.transformCoordinates({ x, y }));
-=======
     async click({ x, y }: { x: number, y: number }, options?: { transform: boolean }) {
         const rawX = x, rawY = y;
         if (options?.transform ?? true) ({ x, y } = await this.transformCoordinates({ x, y }));
->>>>>>> Bremote/main
         // console.log("x:", x);
         // console.log("y:", y);
         //await this.visualizer.visualizeAction(x, y);
@@ -341,10 +266,7 @@ export class WebHarness { // implements StateComponent
         
         // await loc.click();
         await this._click(x, y);
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'click', x: rawX, y: rawY });
->>>>>>> Bremote/main
         
 
         
@@ -404,22 +326,6 @@ export class WebHarness { // implements StateComponent
         clickCount?: number;
         delay?: number;
     }) {
-<<<<<<< HEAD
-        // Capture popups that are a direct consequence of this click so the agent can
-        // follow links that open in a new tab without hijacking user-created tabs.
-        // Register a one-time, non-blocking handler before the click.
-        const onPopup = async (popupPage: Page) => {
-            try {
-                const url = popupPage.url();
-                if (!url.includes('chrome://chat') && !url.includes('Meteor AI Chat')) {
-                    this.tabs.markPageAsAgentControlled(popupPage);
-                    this.tabs.setActivePage(popupPage);
-                }
-            } catch (_) { /* ignore */ }
-        };
-        this.page.once('popup', onPopup);
-=======
->>>>>>> Bremote/main
         await Promise.all([
             this.visualizer.moveVirtualCursor(x, y),
             this.page.mouse.move(x, y, { steps: 20 })
@@ -429,20 +335,6 @@ export class WebHarness { // implements StateComponent
         await this.visualizer.hideAll(); // hide / show pointer because no-pointer is not always consistent and visualizer can block click
         await this.page.mouse.click(x, y);
         await this.visualizer.showAll();
-<<<<<<< HEAD
-
-        // No await; adoption will happen asynchronously if a popup occurs
-    }
-
-    async rightClick({ x, y }: { x: number, y: number }) {
-        ({ x, y } = await this.transformCoordinates({ x, y }));
-        await this._click(x, y, { button: "right" });
-        await this.waitForStability();
-    }
-
-    async doubleClick({ x, y }: { x: number, y: number }) {
-        ({ x, y } = await this.transformCoordinates({ x, y }));
-=======
     }
 
     async rightClick({ x, y }: { x: number, y: number }, options?: { transform: boolean }) {
@@ -456,19 +348,10 @@ export class WebHarness { // implements StateComponent
     async doubleClick({ x, y }: { x: number, y: number }, options?: { transform: boolean }) {
         const rawX = x, rawY = y;
         if (options?.transform ?? true) ({ x, y } = await this.transformCoordinates({ x, y }));
->>>>>>> Bremote/main
         await this.visualizer.moveVirtualCursor(x, y);
         await this.visualizer.hideAll();
         await this.page.mouse.dblclick(x, y);
         await this.visualizer.showAll();
-<<<<<<< HEAD
-        await this.waitForStability();
-    }
-
-    async drag({ x1, y1, x2, y2 }: { x1: number, y1: number, x2: number, y2: number }) {
-        ({ x: x1, y: y1 } = await this.transformCoordinates({ x: x1, y: y1 }));
-        ({ x: x2, y: y2 } = await this.transformCoordinates({ x: x2, y: y2 }));
-=======
         this.events.emit('stepRecorded', { kind: 'doubleClick', x: rawX, y: rawY });
         await this.waitForStability();
     }
@@ -477,7 +360,6 @@ export class WebHarness { // implements StateComponent
         const raw = { x1, y1, x2, y2 };
         if (options?.transform ?? true) ({ x: x1, y: y1 } = await this.transformCoordinates({ x: x1, y: y1 }));
         if (options?.transform ?? true) ({ x: x2, y: y2 } = await this.transformCoordinates({ x: x2, y: y2 }));
->>>>>>> Bremote/main
 
         //console.log(`Dragging: (${x1}, ${y1}) -> (${x2}, ${y2})`);
         
@@ -493,37 +375,13 @@ export class WebHarness { // implements StateComponent
         // await this.page.mouse.move(x2, y2, { steps: 100 });
         // await this.visualizer.visualizeAction(x2, y2);
         await this.page.mouse.up();
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'drag', x1: raw.x1, y1: raw.y1, x2: raw.x2, y2: raw.y2 });
->>>>>>> Bremote/main
         await this.waitForStability();
         //await this.visualizer.removeActionVisuals();
     }
 
     async type({ content }: { content: string }) {
         await this._type(content);
-<<<<<<< HEAD
-        await this.waitForStability();
-    }
-
-    async clickAndType({ x, y, content }: { x: number, y: number, content: string }) {
-        // TODO: transforms incorrect for moondream grounding with virtual screen dims (claude) - unsure why
-        //console.log(`Pre transform: ${x}, ${y}`);
-        ({ x, y } = await this.transformCoordinates({ x, y }));
-        //console.log(`Post transform: ${x}, ${y}`);
-        await this.visualizer.moveVirtualCursor(x, y);
-        this._click(x, y);
-        await this._type(content);
-        await this.waitForStability();
-    }
-    
-    async scroll({ x, y, deltaX, deltaY }: { x: number, y: number, deltaX: number, deltaY: number }) {
-        ({ x, y } = await this.transformCoordinates({ x, y }));
-        await this.visualizer.moveVirtualCursor(x, y);
-        await this.page.mouse.move(x, y);
-        await this.page.mouse.wheel(deltaX, deltaY);
-=======
         this.events.emit('stepRecorded', { kind: 'type', content });
         await this.waitForStability();
     }
@@ -549,79 +407,38 @@ export class WebHarness { // implements StateComponent
         await this.page.mouse.move(x, y);
         await this.page.mouse.wheel(deltaX, deltaY);
         this.events.emit('stepRecorded', { kind: 'scroll', x: rawX, y: rawY, deltaX, deltaY });
->>>>>>> Bremote/main
         await this.waitForStability();
     }
 
     async switchTab({ index }: { index: number }) {
         await this.tabs.switchTab(index);
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'switchTab', index });
->>>>>>> Bremote/main
         await this.waitForStability();
     }
 
     async newTab() {
-<<<<<<< HEAD
-        const newPage = await this.context.newPage();
-        // Mark this agent-created page as controlled
-        this.tabs.markPageAsAgentControlled(newPage);
-        // Reasonable default and less confusing than white about:blank page
-        await this.navigate("https://google.com");
-    }
-
-    async newBackgroundTab() {
-        // Create a background tab that doesn't steal focus
-        // This method communicates with the C++ bridge to create a truly background tab
-        try {
-            if (!this.page) {
-                throw new Error('No active page available for CDP background target creation');
-            }
-            // Try to use CDP Target.createTarget for background tab creation
-            const session = await this.page.context().newCDPSession(this.page);
-            const { targetId } = await session.send('Target.createTarget', {
-                url: 'https://google.com',
-                background: true
-            });
-            await session.detach();
-            
-            // Wait for the new page to be created in our context
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Find the new page and set it as active without bringing to front
-            const pages = this.context.pages();
-            const newPage = pages[pages.length - 1];
-            if (newPage) {
-                // Mark this agent-created page as controlled
-                this.tabs.markPageAsAgentControlled(newPage);
-                this.tabs.setActivePage(newPage);
-            }
-        } catch (error) {
-            console.warn('Background tab creation failed, falling back to regular newPage:', error);
-            // Fallback to regular page creation but don't bring to front
-            const newPage = await this.context.newPage();
-            await newPage.goto("https://google.com", { waitUntil: 'domcontentloaded' });
-            // Mark this agent-created page as controlled
-            this.tabs.markPageAsAgentControlled(newPage);
-            this.tabs.setActivePage(newPage);
-            // Explicitly do NOT call bringToFront
-        }
-=======
         await this.context.newPage();
         // Reasonable default and less confusing than white about:blank page
         await this.navigate("https://google.com");
         this.events.emit('stepRecorded', { kind: 'newTab' });
->>>>>>> Bremote/main
+    }
+
+    async newBackgroundTab(): Promise<void> {
+        const page = await this.context.newPage();
+        await page.goto("https://google.com", { waitUntil: 'domcontentloaded' });
+        this.tabs.markPageAsAgentControlled(page);
+        this.tabs.setActivePage(page);
+    }
+
+    async stop(): Promise<void> {
+        // Cleanup any visuals and listeners as needed
+        try { this.events.removeAllListeners(); } catch {}
     }
 
     async navigate(url: string) {
         // Only wait for DOM content on goto since we handle waiting for network idle etc ourselves
         await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'navigate', url });
->>>>>>> Bremote/main
         await this.waitForStability();
     }
 
@@ -629,42 +446,27 @@ export class WebHarness { // implements StateComponent
         await this.page.keyboard.down('ControlOrMeta');
         await this.page.keyboard.press('KeyA');
         await this.page.keyboard.up('ControlOrMeta');
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'selectAll' });
->>>>>>> Bremote/main
     }
 
     async enter() {
         await this.page.keyboard.press('Enter')
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'enter' });
->>>>>>> Bremote/main
     }
 
     async backspace() {
         await this.page.keyboard.press('Backspace')
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'backspace' });
->>>>>>> Bremote/main
     }
 
     async tab() {
         await this.page.keyboard.press('Tab')
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'tab' });
->>>>>>> Bremote/main
     }
 
     async goBack() {
         await this.page.goBack();
-<<<<<<< HEAD
-=======
         this.events.emit('stepRecorded', { kind: 'goBack' });
->>>>>>> Bremote/main
     }
 
     async executeAction(action: WebAction) {

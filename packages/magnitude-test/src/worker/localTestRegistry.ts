@@ -1,10 +1,6 @@
 import { TestFunction, TestGroup, TestOptions } from "@/discovery/types";
 import cuid2 from "@paralleldrive/cuid2";
-<<<<<<< HEAD
-import { getTestWorkerData, postToParent, testFunctions, messageEmitter, TestWorkerIncomingMessage } from "./util";
-=======
 import { getTestWorkerData, postToParent, testFunctions, messageEmitter, TestWorkerIncomingMessage, hooks } from "./util";
->>>>>>> Bremote/main
 import { TestCaseAgent } from "@/agent";
 import { TestResult, TestState, TestStateTracker } from "@/runner/state";
 import { buildDefaultBrowserAgentOptions } from "magnitude-core";
@@ -32,8 +28,6 @@ export function registerTest(testFn: TestFunction, title: string, url: string) {
     });
 }
 
-<<<<<<< HEAD
-=======
 let beforeAllExecuted = false;
 let beforeAllError: Error | null = null;
 let afterAllExecuted = false;
@@ -41,7 +35,6 @@ let isShuttingDown = false;
 let pendingAfterEach: Set<string> = new Set();
 // No state reset is needed because each test file is run in a separate worker
 
->>>>>>> Bremote/main
 let currentGroup: TestGroup | undefined;
 export function setCurrentGroup(group?: TestGroup) {
     currentGroup = group;
@@ -52,9 +45,6 @@ export function currentGroupOptions(): TestOptions {
 
 messageEmitter.removeAllListeners('message');
 messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
-<<<<<<< HEAD
-    if (message.type !== 'execute') return;
-=======
     if (message.type === 'graceful_shutdown') {
         isShuttingDown = true;
 
@@ -100,7 +90,6 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
         return;
     }
 
->>>>>>> Bremote/main
     const { test, browserOptions, llm, grounding, telemetry } = message;
     const testFn = testFunctions.get(test.id);
 
@@ -147,9 +136,6 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
         let finalResult: TestResult;
 
         try {
-<<<<<<< HEAD
-            await testFn(agent);
-=======
             if (!beforeAllExecuted && hooks.beforeAll.length > 0) {
                 try {
                     for (const beforeAllHook of hooks.beforeAll) {
@@ -191,7 +177,6 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
                 }
             }
 
->>>>>>> Bremote/main
             finalState = {
                 ...tracker.getState(),
                 status: 'passed' as const,
@@ -200,8 +185,6 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
 
             finalResult = { passed: true };
         } catch (error) {
-<<<<<<< HEAD
-=======
             if (!isShuttingDown) {
                 pendingAfterEach.delete(test.id);
                 try {
@@ -216,7 +199,6 @@ messageEmitter.on('message', async (message: TestWorkerIncomingMessage) => {
                 }
             }
 
->>>>>>> Bremote/main
             const failure = {
                 message: error instanceof Error ? error.message : String(error)
             };

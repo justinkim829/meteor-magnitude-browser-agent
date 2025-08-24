@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-<<<<<<< HEAD
-import { Command } from 'commander';
-=======
 import { Command } from '@commander-js/extra-typings';
->>>>>>> Bremote/main
 import path from 'node:path';
 import fs from 'node:fs';
 import { glob } from 'glob';
@@ -28,15 +24,13 @@ import { TermAppRenderer } from '@/term-app'; // Import TermAppRenderer
 import { startWebServers, stopWebServers } from './webServer';
 import chalk from 'chalk';
 
-<<<<<<< HEAD
-interface CliOptions {
-    workers?: number;
-    plain: boolean;
-    debug: boolean;
-}
+type RunnerActionOptions = {
+    workers?: string;
+    plain?: boolean;
+    debug?: boolean;
+    failFast?: boolean;
+};
 
-=======
->>>>>>> Bremote/main
 function getRelativePath(projectRoot: string, absolutePath: string): string {
     // Ensure both paths are absolute and normalized
     const normalizedAbsolutePath = path.normalize(absolutePath);
@@ -150,13 +144,8 @@ program
     .option('-w, --workers <number>', 'number of parallel workers for test execution', '1')
     .option('-p, --plain', 'disable pretty output and print lines instead')
     .option('-d, --debug', 'enable debug logs')
-<<<<<<< HEAD
-    // Changed action signature from (filters, options) to (filter, options)
-    .action(async (filter, options: CliOptions) => {
-=======
     .option('--no-fail-fast', 'continue running tests even if some fail')
-    .action(async (filter, options) => {
->>>>>>> Bremote/main
+    .action(async (filter: string | undefined, options: RunnerActionOptions) => {
         dotenv.config();
         let logLevel: string;
 
@@ -171,11 +160,7 @@ program
             logLevel = 'warn';
         }
         coreLogger.level = logLevel;
-<<<<<<< HEAD
-        logger.level =logLevel;
-=======
         logger.level = logLevel;
->>>>>>> Bremote/main
 
         const patterns = [
             '!**/node_modules/**',
@@ -211,10 +196,6 @@ program
 
         //console.log(config)
 
-<<<<<<< HEAD
-
-=======
->>>>>>> Bremote/main
         // // If planner not provided, make a choice based on available environment variables
         // if (!config.planner) {
         //     const planner = tryDeriveEnvironmentPlannerClient();
@@ -269,12 +250,9 @@ program
         const testSuiteRunner = new TestSuiteRunner({
             config,
             workerCount: workerCount,
-<<<<<<< HEAD
-=======
             failFast: options.failFast === false
                 ? false
                 : !config.continueAfterFailure,
->>>>>>> Bremote/main
             createRenderer: (tests) => showUI
                 ? new TermAppRenderer(config, tests)
                 : {
@@ -307,7 +285,7 @@ program
     .description('Initialize Magnitude test directory structure')
     .option('-f, --force', 'force initialization even if no package.json is found')
     .option('--dir, --destination <path>', 'destination directory for Magnitude tests', 'tests/magnitude')
-    .action(async (options) => {
+    .action(async (options: { force?: boolean; destination?: string }) => {
         await initializeProject(options.force, options.destination);
     });
 

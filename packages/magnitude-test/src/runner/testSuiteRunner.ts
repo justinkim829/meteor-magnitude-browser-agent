@@ -1,10 +1,6 @@
 import { MagnitudeConfig, RegisteredTest, TestOptions } from '@/discovery/types';
 import { processUrl } from '../util';
-<<<<<<< HEAD
-import { WorkerPool, WorkerPoolResult } from './workerPool';
-=======
 import { WorkerPool } from './workerPool';
->>>>>>> Bremote/main
 import { TestResult, TestState } from './state';
 import { TestRenderer } from '@/renderer';
 import { Worker } from 'node:worker_threads';
@@ -18,10 +14,7 @@ export interface TestSuiteRunnerConfig {
     workerCount: number;
     createRenderer: (tests: RegisteredTest[]) => TestRenderer;
     config: MagnitudeConfig;
-<<<<<<< HEAD
-=======
     failFast?: boolean;
->>>>>>> Bremote/main
 }
 
 export class TestSuiteRunner {
@@ -31,10 +24,7 @@ export class TestSuiteRunner {
 
     private tests: RegisteredTest[];
     private executors: Map<string, ClosedTestExecutor> = new Map();
-<<<<<<< HEAD
-=======
     private workerStoppers: (() => Promise<void>)[] = [];
->>>>>>> Bremote/main
 
     constructor(
         config: TestSuiteRunnerConfig
@@ -44,32 +34,12 @@ export class TestSuiteRunner {
         this.config = config.config;
     }
 
-<<<<<<< HEAD
-    private runTest(test: RegisteredTest, signal: AbortSignal): Promise<TestResult> {
-=======
     private async runTest(test: RegisteredTest, signal: AbortSignal): Promise<TestResult> {
->>>>>>> Bremote/main
         const executor = this.executors.get(test.id);
         if (!executor) {
             throw new Error(`Test worker not found for test ID: ${test.id}`);
         }
 
-<<<<<<< HEAD
-        return executor(
-            {
-                type: "execute",
-                test,
-                browserOptions: this.config.browser,
-                llm: this.config.llm,
-                grounding: this.config.grounding,
-                telemetry: this.config.telemetry
-            },
-            (state: TestState) => {
-                this.renderer?.onTestStateUpdated(test, state);
-            },
-            signal
-        );
-=======
         try {
             return await executor(
                 {
@@ -105,7 +75,6 @@ export class TestSuiteRunner {
                 }
             };
         }
->>>>>>> Bremote/main
     }
 
     private getActiveOptions(): TestOptions {
@@ -135,10 +104,7 @@ export class TestSuiteRunner {
             for (const test of result.tests) {
                 this.executors.set(test.id, result.executor);
             }
-<<<<<<< HEAD
-=======
             this.workerStoppers.push(result.stopper);
->>>>>>> Bremote/main
         } catch (error) {
             console.error(`Failed to load test file ${relativeFilePath}:`, error);
             throw error;
@@ -151,30 +117,6 @@ export class TestSuiteRunner {
         this.renderer.start?.();
         const workerPool = new WorkerPool(this.runnerConfig.workerCount);
 
-<<<<<<< HEAD
-        const taskFunctions = this.tests.map((test) => {
-            return async (signal: AbortSignal): Promise<TestResult> => {
-                try {
-                    return await this.runTest(test, signal);
-                } catch (err: unknown) {
-                    // user-facing, can happen e.g. when URL is not running
-                    if (err instanceof Error) {
-                        console.error(`Unexpected error during test '${test.title}':\n${err.message}`);
-                    } else {
-                        console.error(`Unexpected error during test '${test.title}':\n${err}`);
-                    }
-
-                    throw err;
-                }
-            };
-        });
-
-        let overallSuccess = true;
-        try {
-            const poolResult: WorkerPoolResult<TestResult> = await workerPool.runTasks<TestResult>(
-                taskFunctions,
-                (taskOutcome: TestResult) => !taskOutcome.passed
-=======
         let overallSuccess = true;
         try {
             const poolResult = await workerPool.runTasks(
@@ -182,7 +124,6 @@ export class TestSuiteRunner {
                 this.runnerConfig.failFast
                     ? (taskOutcome: TestResult) => !taskOutcome.passed
                     : () => false
->>>>>>> Bremote/main
             );
 
             for (const result of poolResult.results) {
@@ -198,8 +139,6 @@ export class TestSuiteRunner {
         } catch (error) {
             overallSuccess = false;
         }
-<<<<<<< HEAD
-=======
 
         const stopperResults = await Promise.allSettled(
             this.workerStoppers.map(stopper => stopper())
@@ -216,7 +155,6 @@ export class TestSuiteRunner {
             }
         }
 
->>>>>>> Bremote/main
         this.renderer.stop?.();
         return overallSuccess;
 
@@ -234,10 +172,7 @@ type CreateTestWorker = (workerData: TestWorkerData) =>
     Promise<{
         tests: RegisteredTest[];
         executor: ClosedTestExecutor;
-<<<<<<< HEAD
-=======
         stopper: () => Promise<void>;
->>>>>>> Bremote/main
     }>;
 
 const createNodeTestWorker: CreateTestWorker = async (workerData) =>
@@ -257,12 +192,6 @@ const createNodeTestWorker: CreateTestWorker = async (workerData) =>
             }
         );
 
-<<<<<<< HEAD
-        const executor: ClosedTestExecutor =
-            (executeMessage, onStateChange, signal) => new Promise((res, rej) => {
-                const messageHandler = (msg: TestWorkerOutgoingMessage) => {
-                    if (!("testId" in msg) || msg.testId !== executeMessage.test.id) return;
-=======
         let hasRunTests = false;
         const stopper = async (): Promise<void> => {
             if (!hasRunTests) {
@@ -308,7 +237,6 @@ const createNodeTestWorker: CreateTestWorker = async (workerData) =>
                 const messageHandler = (msg: TestWorkerOutgoingMessage) => {
                     if ("test" in executeMessage && "testId" in msg && msg.testId !== executeMessage.test.id) return;
                     hasRunTests = true;
->>>>>>> Bremote/main
 
                     if (msg.type === "test_result") {
                         worker.off("message", messageHandler);
@@ -346,11 +274,7 @@ const createNodeTestWorker: CreateTestWorker = async (workerData) =>
                     reject(new Error(`No tests registered for file ${relativeFilePath}`));
                     return;
                 }
-<<<<<<< HEAD
-                resolve({ tests: registeredTests, executor });
-=======
                 resolve({ tests: registeredTests, executor, stopper });
->>>>>>> Bremote/main
             }
         });
 
@@ -402,12 +326,6 @@ const createBunTestWorker: CreateTestWorker = async (workerData) =>
             },
         });
 
-<<<<<<< HEAD
-        const executor: ClosedTestExecutor = (executeMessage, onStateChange, signal) =>
-            new Promise((res, rej) => {
-                const messageHandler = (msg: TestWorkerOutgoingMessage) => {
-                    if (!("testId" in msg) || msg.testId !== executeMessage.test.id) return;
-=======
         let hasRunTests = false;
         const stopper = async (): Promise<void> => {
             if (!hasRunTests) {
@@ -441,7 +359,6 @@ const createBunTestWorker: CreateTestWorker = async (workerData) =>
                 const messageHandler = (msg: TestWorkerOutgoingMessage) => {
                     if ("test" in executeMessage && "testId" in msg && msg.testId !== executeMessage.test.id) return;
                     hasRunTests = true;
->>>>>>> Bremote/main
 
                     if (msg.type === "test_result") {
                         emit.off('message', messageHandler);
@@ -480,20 +397,12 @@ const createBunTestWorker: CreateTestWorker = async (workerData) =>
                     reject(new Error(`No tests registered for file ${relativeFilePath}`));
                     return;
                 }
-<<<<<<< HEAD
-                resolve({ tests: registeredTests, executor });
-=======
                 resolve({ tests: registeredTests, executor, stopper });
->>>>>>> Bremote/main
             }
         }));
 
         const timeout = setTimeout(() => {
-<<<<<<< HEAD
-            proc.kill();
-=======
             proc.kill("SIGKILL");
->>>>>>> Bremote/main
             reject(new Error(`Test file loading timeout: ${relativeFilePath}`));
         }, TEST_FILE_LOADING_TIMEOUT);
     });

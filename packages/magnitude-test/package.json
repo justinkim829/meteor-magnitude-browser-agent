@@ -1,10 +1,6 @@
 {
   "name": "magnitude-test",
-<<<<<<< HEAD
-  "version": "0.3.2",
-=======
   "version": "0.3.10",
->>>>>>> Bremote/main
   "description": "A TypeScript client for running automated UI tests through the Magnitude testing platform",
   "publishConfig": {
     "access": "public"
@@ -69,27 +65,17 @@
     "playwright": "npm:rebrowser-playwright@^1.52.0"
   },
   "dependencies": {
-<<<<<<< HEAD
-    "@paralleldrive/cuid2": "^2.2.2",
-    "@types/terminal-kit": "^2.5.7",
-    "chalk": "^5.4.1",
-=======
     "@commander-js/extra-typings": "^14.0.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@types/terminal-kit": "^2.5.7",
     "chalk": "^5.4.1",
     "commander": "^14.0.0",
->>>>>>> Bremote/main
     "dotenv": "^16.5.0",
     "esbuild": "^0.25.1",
     "glob": "^11.0.1",
     "jiti": "^2.4.2",
     "log-update": "^6.1.0",
-<<<<<<< HEAD
-    "magnitude-core": "0.2.23",
-=======
     "magnitude-core": "0.2.31",
->>>>>>> Bremote/main
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "playwright": "^1.51.0",
