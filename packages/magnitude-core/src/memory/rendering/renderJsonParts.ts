@@ -103,7 +103,7 @@ async function buildJsonPartsRecursive(
         return;
     }
 
-    throw new Error(`Object type not supported for JSON rendering: '${typeof data}'. Data: ${data}`);
+    throw new Error(`Object type not supported for JSON rendering: ${typeof data}`);
 }
 
 export async function renderJsonParts(data: RenderableContent, indent: number): Promise<MultiMediaContentPart[]> {
