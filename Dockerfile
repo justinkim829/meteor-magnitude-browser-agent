@@ -56,6 +56,7 @@ RUN npm install --force
 # Copy app source
 COPY magnitude_mcp_server_new_tab.js ./
 COPY magnitude_mcp_server.js ./
+COPY services ./services
 
 # Create .env file placeholder
 RUN touch .env

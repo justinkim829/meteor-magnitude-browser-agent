@@ -6,7 +6,7 @@
 
 import express from 'express';
 import bodyParser from 'body-parser';
-import { startBrowserAgent } from 'magnitude-core';
+import { startBrowserAgent, AgentMemory } from 'magnitude-core';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -24,6 +24,7 @@ const PORT = 9123;
 const CDP_URL = 'http://localhost:9222';
 
 let browserAgent = null;
+let sharedMemory = null;
 
 // Initialize browser agent
 async function initBrowserAgent() {
@@ -159,7 +160,11 @@ app.post('/mcp/tool/call', async (req, res) => {
         
       case 'magnitude_act':
         console.log(`Performing action: ${args.task}`);
-        const actResult = await browserAgent.act(args.task);
+        if (!sharedMemory) {
+          // Persist memory across requests and increase thought retention window
+          sharedMemory = new AgentMemory({ thoughtLimit: 100, promptCaching: true });
+        }
+        const actResult = await browserAgent.act(args.task, { memory: sharedMemory });
         result = {
           success: true,
           task: args.task,

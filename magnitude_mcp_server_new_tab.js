@@ -15,6 +15,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { chromium } from 'playwright';
+
 import { EventEmitter } from 'events';
 import net from 'net';
 import crypto from 'crypto';
@@ -106,6 +107,8 @@ const PORT = process.env.MAGNITUDE_MCP_PORT || process.env.MAGNITUDE_PORT || 912
 const CDP_URL = process.env.CDP_URL || 'http://localhost:9222';
 const SECURE_IPC_SOCKET = process.env.SECURE_IPC_SOCKET;
 
+
+
 // Protocol version and capabilities for enhanced registration
 const PROTOCOL_VERSION = "1.0";
 const SUPPORTED_CAPABILITIES = ["encrypted_communication", "token_rotation", "key_exchange"];
@@ -177,6 +180,15 @@ function generateFallbackKeys() {
 // Fix hostname issue: magnitude-core uses 127.0.0.1 but Chrome binds to localhost/[::1]
 // Convert any 127.0.0.1 URLs to localhost for compatibility
 const FIXED_CDP_URL = CDP_URL.replace('127.0.0.1', 'localhost');
+
+// Helper: guidance for agent prompt about when to request human intervention
+function buildAgentPrompt() {
+  return [
+    'Tab usage policy:',
+    '- When starting a task, open a new tab for your work. Do not navigate or repurpose existing user tabs unless explicitly requested.',
+    '- Prefer creating the new tab in the background to avoid stealing focus.',
+  ].join('\n');
+}
 
 // Resolve DevTools WS endpoint from an HTTP CDP URL that may include a token
 // Ensures correct placement of token on /json/version and on the returned ws URL
@@ -672,6 +684,8 @@ let narratorEvents = [];
 let taskIdCounter = 1;
 let taskEventQueues = new Map(); // Map of task ID to TaskEventQueue
 let browserConnections = new Map(); // Map of browser instance ID to connection info
+// Track human intervention requests/resolutions per task
+// let interventionsByTask = new Map(); // taskId -> { taskId, message, context, created_at, resolved, action, response_message }
 
 // Metrics tracking
 const metrics = {
@@ -845,7 +859,7 @@ async function waitForRegisteredConnection(browserInstanceId, maxWaitMs = 8000) 
 // Helper function to create a new browser agent for each task
 async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
   try {
-    console.log(`[${new Date().toISOString()}] Creating new browser agent for task ${taskId}`);
+    // Creating new browser agent for task
     
     let cdpUrl;
     
@@ -886,6 +900,8 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
             promptCaching: true
           }
         },
+        // Add agent prompt to guide human intervention usage
+        prompt: buildAgentPrompt(),
         visuals: {
           showCursor: true,
           showHoverCircle: false,
@@ -895,7 +911,9 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
         },
         narrate: true
       });
-      console.log('✅ Browser agent created using persistent context');
+      // Browser agent created using persistent context
+      // Attach task id for actions (e.g., request_intervention)
+      browserAgent.taskId = taskId;
       return browserAgent;
     } else if (process.env.USE_SECURE_CDP === 'true') {
       // Secure mode requested: prefer the registered connection, with a short wait to avoid race
@@ -933,8 +951,9 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
               promptCaching: true
             }
           },
+          // prompt: buildAgentPrompt(),
           visuals: {
-            showCursor: true,
+            showCursor: false,
             showHoverCircle: false,
             showClickRipple: false,
             showDragLine: false,
@@ -942,7 +961,8 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
           },
           narrate: true
         });
-        console.log('✅ Browser agent created using persistent context (registered)');
+        // Browser agent created using persistent context (registered)
+        browserAgent.taskId = taskId;
         return browserAgent;
       } catch (error) {
         console.error(`[Security] Failed to obtain registered browser connection within timeout: ${error.message}`);
@@ -957,7 +977,7 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
       cdpUrl = FIXED_CDP_URL;
     }
     
-    console.log(`[Task ${taskId}] Starting browser agent with CDP URL: ${cdpUrl}`);
+    // Starting browser agent with CDP URL
     
     // Let magnitude-core handle the connection internally by passing CDP URL
     // This ensures that magnitude-core uses our secure token instead of generating its own
@@ -977,54 +997,47 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
           promptCaching: true
         }
       },
-      // Visual configuration - disable all effects except cursor
+      // prompt: buildAgentPrompt(),
+      // Visual configuration - disable all effects, including cursor and keyboard overlay
       visuals: {
-        showCursor: true,      // Keep cursor visible
-        showHoverCircle: false, // Disable hover circle
-        showClickRipple: false, // Disable click animations
-        showDragLine: false,    // Disable drag line
-        showTypeEffects: false  // Disable keyboard effects
+        showCursor: false,
+        showHoverCircle: false,
+        showClickRipple: false,
+        showDragLine: false,
+        showTypeEffects: false
       },
       // Enable narration for debugging
       narrate: true
     });
     
-    console.log(`[Task ${taskId}] ✨ Browser agent created successfully`);
+    // Browser agent created successfully
     
     // Track browser instance ID for connection pooling
     browserAgent.browserInstanceId = browserInstanceId;
+    // // Attach task id for actions (e.g., request_intervention)
+    // browserAgent.taskId = taskId;
     
     // Set up narrator event listeners for this agent
     if (browserAgent.browserAgentEvents) {
       browserAgent.browserAgentEvents.on('nav', async (url) => {
-        addNarratorEvent('navigate', `[Task ${taskId}] Navigating to ${url}`);
+        // Navigation event (not logged to avoid clutter)
       });
       
       browserAgent.browserAgentEvents.on('extractStarted', (instructions) => {
-        addNarratorEvent('extract', `[Task ${taskId}] Extracting: ${instructions}`);
+        // Extract started (not logged to avoid clutter)
       });
       
       browserAgent.browserAgentEvents.on('extractDone', (instructions, data) => {
-        addNarratorEvent('extract_done', `[Task ${taskId}] Extraction complete`);
+        // Extract completed (not logged to avoid clutter)
       });
       
       browserAgent.browserAgentEvents.on('action', (action) => {
-        addNarratorEvent('action', `[Task ${taskId}] ${action}`);
+        // Action event (not logged to avoid clutter)
       });
+      // Note: thought listeners are now handled via emit interception above
     }
     
-    // Set up thought event listener - this captures the agent's reasoning
-    if (browserAgent.events) {
-      browserAgent.events.on('thought', (thought) => {
-        const msg = `[Task ${taskId}] Thought: ${String(thought)}`;
-        console.log(`[Task ${taskId}] 💭 Thought: ${thought}`);
-        // Enqueue directly to this task's SSE queue to avoid any race or regex mismatch
-        const tq = taskEventQueues.get(taskId);
-        if (tq) tq.addEvent('thought', msg);
-        // Also record in narrator log for polling/diagnostics
-        addNarratorEvent('thought', msg);
-      });
-    }
+    // Note: thought listeners are now handled via emit interception above
     
     // Verify that the browser agent is focused on the correct tab
     try {
@@ -1040,7 +1053,7 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
       console.log(`⚠️  FOCUS ERROR: Could not verify agent ${taskId} focus: ${error.message}`);
     }
     
-    console.log(`✅ Browser agent ${taskId} created with new tab`);
+    // Browser agent created with new tab
     return browserAgent;
   } catch (error) {
     console.error(`Failed to create browser agent for task ${taskId}:`, error);
@@ -1048,7 +1061,7 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
   }
 }
 
-// Helper function to add narrator events
+// Simplified helper function to add narrator events
 function addNarratorEvent(type, message) {
   const event = {
     type,
@@ -1069,7 +1082,11 @@ function addNarratorEvent(type, message) {
     const taskId = parseInt(taskIdMatch[1]);
     const taskQueue = taskEventQueues.get(taskId);
     if (taskQueue) {
-      taskQueue.addEvent(type, message);
+      // Don't double-add events that are already being added directly to the queue
+      // Only add narrator-specific events here
+      if (!['task_start', 'act', 'extract', 'check', 'navigate', 'task_complete', 'error', 'task_stopped'].includes(type)) {
+        taskQueue.addEvent(type, message);
+      }
     }
   }
 }
@@ -1093,6 +1110,87 @@ app.get('/mcp/health', (req, res) => {
     cdpUrl: FIXED_CDP_URL,
     originalCdpUrl: CDP_URL
   });
+});
+
+// Automation-only endpoint (no LLM agent): automation/:service/:tool
+// Example: POST /automation/linkedin/search_people_in_company { company_slug: "acme-inc" }
+// NOTE: Register the generic runner BEFORE the :tool route so '/run' does not get captured by ':tool'.
+
+// Generic tool runner with optional uploaded code execution
+// POST /automation/:service/run
+// Body: { tool_name: string, args?: object, code?: string (ESM), browser_instance_id?: string }
+app.post('/automation/:service/run', async (req, res) => {
+  const service = (req.params.service || '').toLowerCase();
+  const { tool_name: raw_tool_name, args = {}, code, browser_instance_id } = req.body || {};
+
+  const apiKey = req.headers['x-api-key'] || req.query.api_key;
+  if (!apiKey || apiKey !== getSecret('MCP_API_KEY')) {
+    return res.status(401).json({ error: 'Invalid or missing API key' });
+  }
+
+  if (!raw_tool_name) {
+    return res.status(400).json({ error: 'tool_name is required' });
+  }
+
+  try {
+    // Normalize tool name: strip redundant service_ prefix if present (e.g., linkedin_save_top_n_jobs → save_top_n_jobs)
+    const tool_name = (() => {
+      try {
+        const s = String(service || '');
+        const t = String(raw_tool_name || '');
+        const pref = s + '_';
+        return t.toLowerCase().startsWith(pref.toLowerCase()) ? t.slice(pref.length) : t;
+      } catch (_) { return raw_tool_name; }
+    })();
+
+    console.log(`[Automation] REQUEST ${service}.run tool=${tool_name} raw_tool=${raw_tool_name} code=${!!code} argsKeys=[${Object.keys(args || {}).join(',')}] browser_instance_id=${browser_instance_id || ''}`);
+    // Resolve a function to execute
+    let fn = null;
+
+    // First: handle inline uploaded code (requires a page)
+    if (code && typeof code === 'string' && code.trim().length > 0) {
+      const base64 = Buffer.from(code).toString('base64');
+      const dataUrl = `data:text/javascript;base64,${base64}`;
+      const mod = await import(dataUrl);
+      fn = mod && mod[tool_name] ? mod[tool_name] : null;
+      if (fn) {
+        console.log(`[Automation] EXECUTE path=inline_code service=${service} tool=${tool_name}`);
+        const { context } = await getPersistentContext(browser_instance_id);
+        const page = await context.newPage();
+        try {
+          const result = await fn(page, ...Object.values(args || {}));
+          return res.json({ ...(typeof result === 'undefined' ? { success: true } : { success: true, result }), meta: { execution_path: 'inline_code', service, tool_name } });
+        } catch (toolErr) {
+          return res.status(500).json({ success: false, error: toolErr?.message || String(toolErr) });
+        }
+      }
+    }
+
+    // Direct import of tools module (requires a page)
+    try {
+      const toolsPath = new URL(`./services/${service}_tools.js`, import.meta.url);
+      const toolsMod = await import(toolsPath);
+      fn = toolsMod && toolsMod[tool_name] ? toolsMod[tool_name] : null;
+    } catch (_) {
+      // ignore
+    }
+
+    if (!fn) {
+      return res.status(404).json({ error: `Tool not found: ${service}/${tool_name}` });
+    }
+
+    const { context } = await getPersistentContext(browser_instance_id);
+    const page = await context.newPage();
+    try {
+      console.log(`[Automation] EXECUTE path=dynamic_module service=${service} tool=${tool_name}`);
+      const result = await fn(page, ...Object.values(args || {}));
+      return res.json({ ...(typeof result === 'undefined' ? { success: true } : { success: true, result }), meta: { execution_path: 'dynamic_module', service, tool_name } });
+    } catch (toolErr) {
+      return res.status(500).json({ success: false, error: toolErr?.message || String(toolErr) });
+    }
+  } catch (e) {
+    return res.status(500).json({ error: e && e.message ? e.message : String(e) });
+  }
 });
 
 // Browser registration endpoint for secure CDP connections
@@ -1527,7 +1625,7 @@ app.get('/mcp/events', (req, res) => {
   res.json({ events: [...narratorEvents] });
 });
 
-// SSE endpoint for real-time event streaming
+// Fixed SSE endpoint for real-time event streaming
 app.get('/mcp/events/stream/:taskId', (req, res) => {
   const taskId = parseInt(req.params.taskId);
   console.log(`[SSE] Client connected for task ${taskId}`);
@@ -1540,8 +1638,8 @@ app.get('/mcp/events/stream/:taskId', (req, res) => {
     'Access-Control-Allow-Origin': '*'
   });
   
-  // Send initial connection event
-  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'connected', taskId })}\n\n`);
+  // Send initial connection event (minimal)
+  res.write(`data: ${JSON.stringify({ type: 'connected', message: '', taskId })}\n\n`);
   
   // Get task queue
   const taskQueue = taskEventQueues.get(taskId);
@@ -1557,9 +1655,42 @@ app.get('/mcp/events/stream/:taskId', (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   });
   
+  // Track last sent event to avoid duplicate consecutive thoughts, but with timestamp check
+  let lastSent = { type: null, message: null, timestamp: 0 };
+  
   // Event listener for new events
   const sendEvent = (event) => {
+    // Debug logging for all events
+    console.log(`[SSE] Attempting to send event: type=${event?.type}, message=${event?.message?.substring(0, 50)}...`);
+    
+    // Check if this is an action pattern event (starts with action symbols)
+    const actionPatterns = ['⛓︎', '⊙', '📝', '✓', '🔍', '⏸', '📷'];
+    const isActionPattern = event && event.type === 'thought' && event.message && 
+                           actionPatterns.some(pattern => event.message.trim().startsWith(pattern));
+    
+    // Only suppress if it's the exact same thought within 100ms (true duplicate) AND not an action pattern
+    const now = Date.now();
+    if (!isActionPattern && 
+        event && event.type === 'thought' &&
+        lastSent.type === 'thought' && 
+        lastSent.message === event.message &&
+        (now - lastSent.timestamp) < 100) {
+      console.log(`[SSE] Suppressing duplicate thought: ${event.message?.substring(0, 30)}...`);
+      return; // suppress only rapid-fire duplicate thoughts
+    }
+    
+    // Always send action patterns
+    if (isActionPattern) {
+      console.log(`[SSE] Sending action pattern event: ${event.message?.substring(0, 50)}...`);
+    }
+    
     res.write(`data: ${JSON.stringify(event)}\n\n`);
+    lastSent = { 
+      type: event?.type || null, 
+      message: event?.message || null,
+      timestamp: now
+    };
+    console.log(`[SSE] Event sent successfully`);
   };
   
   // Subscribe to new events
@@ -1596,7 +1727,39 @@ app.post('/mcp/events/acknowledge/:taskId', express.json(), (req, res) => {
   res.json({ success: true, acknowledged: eventIds });
 });
 
-// Execute a high-level task using Magnitude (creates new tab)
+// Report the currently active agent page (URL + DevTools targetId) to enable glow
+app.get('/mcp/agent/active', async (req, res) => {
+  try {
+    // Find the most recent task that still has an agent with a page
+    let active = null;
+    for (const [taskId, agent] of Array.from(browserAgents.entries()).reverse()) {
+      if (!agent) continue;
+      // Ignore agents that have completed, been stopped, or errored
+      const status = (agent.status || '').toLowerCase();
+      if (status === 'completed' || status === 'stopped' || status === 'error') {
+        continue;
+      }
+      if (agent.page && typeof agent.page.url === 'function') {
+        const url = agent.page.url();
+        // Best-effort: target id may be available via playwright's CDP session
+        let targetId = undefined;
+        try {
+          if (agent.page.context && agent.page.context()._browser && agent.page.context()._browser._connection) {
+            // Avoid deep introspection; leave targetId undefined
+          }
+        } catch (_e) {}
+        active = { url, targetId };
+        break;
+      }
+    }
+    // If no active running agent, explicitly return empty so the browser clears glow
+    res.json(active || { url: '', targetId: '' });
+  } catch (e) {
+    res.json({ url: '', targetId: '' });
+  }
+});
+
+// Fixed Execute endpoint with proper event handling
 app.post('/mcp/execute', async (req, res) => {
   const { task, mode = 'act', url, data, schema, browser_instance_id } = req.body;
   const taskId = taskIdCounter++;
@@ -1610,46 +1773,212 @@ app.post('/mcp/execute', async (req, res) => {
   
   // Execute task asynchronously
   (async () => {
+    // Create task event queue FIRST
+    const taskQueue = new TaskEventQueue(taskId);
+    taskEventQueues.set(taskId, taskQueue);
+    
+    // Define console restoration function at the top level
+    const originalLog = console.log;
+    let consoleRestored = false;
+    const restoreConsole = () => {
+      if (!consoleRestored) {
+        console.log = originalLog;
+        consoleRestored = true;
+      }
+    };
+    
     try {
-      // Create task event queue
-      const taskQueue = new TaskEventQueue(taskId);
-      taskEventQueues.set(taskId, taskQueue);
-      
-      // Emit an explicit SSE event with both type and message for UI parsing
-      taskQueue.addEvent('task_start', `[Task ${taskId}] Starting ${mode}: ${task}`);
-
       // Create a new browser agent for this task (opens new tab)
       const browserAgent = await createBrowserAgentForTask(taskId, browser_instance_id);
       browserAgents.set(taskId, browserAgent);
       
-      let result;
-      // Keep narrator log in sync
-      addNarratorEvent('task_start', `[Task ${taskId}] Starting ${mode}: ${task}`);
+      // Detect an explicit "done" signal and immediately surface a task_complete node once
+      let doneEventSent = false;
+      const maybeEmitDoneEvent = (text) => {
+        try {
+          if (doneEventSent) return;
+          const t = (text ?? '').toString().trim();
+          if (/^✓\s*done$/i.test(t) || /^done$/i.test(t) || /task\s*completed/i.test(t)) {
+            taskQueue.addEvent('task_complete', 'Task completed successfully');
+            doneEventSent = true;
+            // Mark agent as completed immediately so /mcp/agent/active stops reporting it
+            try { if (browserAgent && typeof browserAgent === 'object') browserAgent.status = 'completed'; } catch (_) {}
+            removeCursorFromAllPagesForAgent(browserAgent).catch(() => {});
+          }
+        } catch (_) {}
+      };
       
-      // Navigate to URL if provided
+      // Simplified thought capture - only capture thoughts from one event source to avoid duplicates
+      // Check which event emitter exists and use only that one
+      const eventSource = browserAgent.browserAgentEvents || browserAgent.events;
+      
+      // Track recent thoughts to prevent duplicates
+      const recentThoughts = new Map();
+      const THOUGHT_DEDUP_WINDOW = 500; // milliseconds
+      
+      if (eventSource) {
+        eventSource.on('thought', (thought) => {
+          const thoughtStr = String(thought);
+          const now = Date.now();
+          
+          // Check for duplicate thought within time window
+          if (recentThoughts.has(thoughtStr)) {
+            const lastTime = recentThoughts.get(thoughtStr);
+            if (now - lastTime < THOUGHT_DEDUP_WINDOW) {
+              console.log(`[Dedup] Skipping duplicate thought within ${THOUGHT_DEDUP_WINDOW}ms`);
+              return;
+            }
+          }
+          
+          // Track this thought
+          recentThoughts.set(thoughtStr, now);
+          
+          // Clean up old entries
+          if (recentThoughts.size > 20) {
+            const oldestAllowed = now - THOUGHT_DEDUP_WINDOW * 2;
+            for (const [key, time] of recentThoughts) {
+              if (time < oldestAllowed) {
+                recentThoughts.delete(key);
+              }
+            }
+          }
+          
+          // Just the thought directly, no task prefix
+          taskQueue.addEvent('thought', thoughtStr);
+          maybeEmitDoneEvent(thought);
+        });
+        
+        if (browserAgent.browserAgentEvents) {
+          browserAgent.browserAgentEvents.on('navigate', (url) => {
+            if (typeof url === 'string') taskQueue.addEvent('navigate', url);
+          });
+          browserAgent.browserAgentEvents.on('action', (action) => {
+            try {
+              const name = (action && (action.name || action.type || action.id)) ? String(action.name || action.type || action.id) : '';
+              if (name) taskQueue.addEvent('action', name);
+            } catch (_) {}
+          });
+          // Detect explicit task:done action to surface completion immediately
+          browserAgent.browserAgentEvents.on('action', (action) => {
+            try {
+              const name = (action && (action.name || action.type || action.id)) ? String(action.name || action.type || action.id) : '';
+              if (!doneEventSent && name.toLowerCase() === 'task:done') {
+                taskQueue.addEvent('task_complete', 'Task completed successfully');
+                doneEventSent = true;
+                // Mark agent as completed immediately so /mcp/agent/active stops reporting it
+                try { if (browserAgent && typeof browserAgent === 'object') browserAgent.status = 'completed'; } catch (_) {}
+                removeCursorFromAllPagesForAgent(browserAgent).catch(() => {});
+              }
+            } catch (_) {}
+          });
+        }
+      }
+      
+      // Enhanced console.log override to capture both thoughts and action patterns
+      const thoughtPatterns = [
+        /I need to/i, /I will/i, /I should/i, /Let me/i, 
+        /I can/i, /I'm /i, /Looking at/i, /Checking/i
+      ];
+      
+      // Action pattern indicators (with optional leading whitespace)
+      const actionPatterns = [
+        { pattern: /^\s*⛓︎\s*/, type: 'navigate' },
+        { pattern: /^\s*⊙\s*/, type: 'click' },
+        { pattern: /^\s*📝\s*/, type: 'extract' },
+        { pattern: /^\s*✓\s*/, type: 'check' },
+        { pattern: /^\s*◴\s*/, type: 'wait' }
+      ];
+      
+      // Track recent console thoughts to prevent duplicates from console.log
+      const recentConsoleThoughts = new Map();
+      const CONSOLE_DEDUP_WINDOW = 500; // milliseconds
+      
+      console.log = function(...args) {
+        const text = args.join(' ');
+        
+        // Filter out debug messages and SSE messages
+        const isDebugMessage = text.includes('[Task') || 
+                              text.includes('💭') || 
+                              text.includes('[SSE]') || 
+                              text.includes('[DEBUG]') ||
+                              text.includes('[Dedup]') ||
+                              text.includes('[TokenFailure]') ||
+                              text.includes('[TIMING]');
+        
+        // Check if this looks like a thought or action (not our own debug messages)
+        if (text && !isDebugMessage) {
+          const now = Date.now();
+          
+          // Check for duplicate from console within time window
+          if (recentConsoleThoughts.has(text)) {
+            const lastTime = recentConsoleThoughts.get(text);
+            if (now - lastTime < CONSOLE_DEDUP_WINDOW) {
+              // Skip duplicate - don't even log it
+              return originalLog.apply(console, args);
+            }
+          }
+          
+          // Track this console thought
+          recentConsoleThoughts.set(text, now);
+          
+          // Clean up old entries
+          if (recentConsoleThoughts.size > 20) {
+            const oldestAllowed = now - CONSOLE_DEDUP_WINDOW * 2;
+            for (const [key, time] of recentConsoleThoughts) {
+              if (time < oldestAllowed) {
+                recentConsoleThoughts.delete(key);
+              }
+            }
+          }
+          
+          // First check for action patterns (including those with leading whitespace)
+          let isAction = false;
+          for (const actionPattern of actionPatterns) {
+            if (actionPattern.pattern.test(text)) {
+              // This is an action indicator - add it as a thought so it reaches frontend
+              originalLog(`[DEBUG] Detected action pattern: ${text.substring(0, 50)}`);
+              taskQueue.addEvent('thought', text);
+              isAction = true;
+              break;
+            }
+          }
+          
+          // If not an action, check if it's a regular thought
+          if (!isAction) {
+            const isThought = thoughtPatterns.some(pattern => pattern.test(text));
+            if (isThought) {
+              // Just the thought directly, no task prefix
+              taskQueue.addEvent('thought', text);
+            }
+          }
+          
+          // Also detect explicit done signal and surface completion node
+          maybeEmitDoneEvent(text);
+        }
+        
+        return originalLog.apply(console, args);
+      };
+      
+      let result;
+      
+      // Navigate to URL if provided (but don't emit navigation events)
       if (url) {
-        addNarratorEvent('navigate', `[Task ${taskId}] Navigating to ${url}`);
         await browserAgent.nav(url);
       }
       
+      // Execute based on mode (no action event messages)
       switch (mode) {
         case 'act':
-          // Execute high-level action
-          addNarratorEvent('act', `[Task ${taskId}] ${task}`);
           result = await browserAgent.act(task, { data });
           break;
           
         case 'extract':
-          // Extract data with schema
-          addNarratorEvent('extract', `[Task ${taskId}] ${task}`);
           const zSchema = schema ? createZodSchemaFromObject(schema) : z.any();
           result = await browserAgent.extract(task, zSchema);
           break;
           
         case 'verify':
         case 'check':
-          // Check condition
-          addNarratorEvent('check', `[Task ${taskId}] ${task}`);
           result = await browserAgent.check(task);
           break;
           
@@ -1657,7 +1986,8 @@ app.post('/mcp/execute', async (req, res) => {
           throw new Error(`Unknown mode: ${mode}`);
       }
       
-      addNarratorEvent('task_complete', `[Task ${taskId}] Task completed successfully`);
+      // Restore console
+      restoreConsole();
       
       // Store the result for later retrieval
       if (!browserAgents.has(taskId)) {
@@ -1666,12 +1996,38 @@ app.post('/mcp/execute', async (req, res) => {
       const agentData = browserAgents.get(taskId);
       agentData.result = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       agentData.status = 'completed';
+      // Mark the running agent (if present) as no longer active so /mcp/agent/active stops returning it
+      try {
+        const runningAgent = browserAgents.get(taskId);
+        if (runningAgent && typeof runningAgent === 'object') {
+          runningAgent.status = 'completed';
+        }
+      } catch (_) {}
+      // Ensure a task_complete node is emitted if it wasn't already
+      try {
+        if (!doneEventSent) {
+          taskQueue.addEvent('task_complete', 'Task completed successfully');
+          doneEventSent = true;
+        }
+      } catch (_) {}
+      // Request backend to summarize this task with objective and timeline
+      try {
+        const summaryPrompt = buildSummaryRequestMessage(task, taskQueue, 'completed');
+        taskQueue.addEvent('summary_request', summaryPrompt);
+      } catch (_) {}
+      // Remove any cursor overlays from all pages now that the task is complete
+      try {
+        await removeCursorFromAllPagesForAgent(browserAgent);
+      } catch (_) {}
       
     } catch (error) {
+      // Restore console on error
+      restoreConsole();
+      
       // Check if this is a stop-related error
       if (error.message && error.message.includes('Target page, context or browser has been closed')) {
         console.log(`Task ${taskId} was stopped by user`);
-        addNarratorEvent('task_stopped', `[Task ${taskId}] Task stopped by user`);
+        taskQueue.addEvent('task_stopped', 'Task stopped by user');
         
         // Store stopped status
         if (browserAgents.has(taskId)) {
@@ -1679,11 +2035,16 @@ app.post('/mcp/execute', async (req, res) => {
           agentData.status = 'stopped';
           agentData.message = 'Task stopped by user';
         }
+        // Ensure cursor overlay is removed on stop
+        try {
+          const agentToClean = browserAgents.get(taskId);
+          await removeCursorFromAllPagesForAgent(agentToClean);
+        } catch (_) {}
       } else {
         console.error(`Error executing task ${taskId}:`, error);
-        addNarratorEvent('error', `[Task ${taskId}] ${error.message}`);
+        taskQueue.addEvent('error', error.message);
         
-        // Check if this is a token-related error (500 status or token validation failure)
+        // Check if this is a token-related error
         if (error.message.includes('Unexpected status 500') || 
             error.message.includes('token') || 
             error.message.includes('hard expiry')) {
@@ -1693,7 +2054,7 @@ app.post('/mcp/execute', async (req, res) => {
           // In static-token mode, preserve registration; otherwise cleanup stale connections
           const rotationDisabled = process.env.DISABLE_CDP_TOKEN_ROTATION !== 'false';
           if (!rotationDisabled) {
-            // Find and clean up stale browser connections to force fresh registration
+            // Find and clean up stale browser connections
             for (const [browserId, connectionInfo] of browserConnections) {
               const tokenAge = connectionInfo.updated_at ? 
                 (new Date() - connectionInfo.updated_at) : 
@@ -1715,6 +2076,11 @@ app.post('/mcp/execute', async (req, res) => {
           agentData.status = 'error';
           agentData.error = error.message;
         }
+        // Best-effort: clean up cursor if present even on error
+        try {
+          const agentToClean = browserAgents.get(taskId);
+          await removeCursorFromAllPagesForAgent(agentToClean);
+        } catch (_) {}
       }
     }
   })();
@@ -1732,6 +2098,16 @@ app.post('/mcp/cleanup/:taskId', async (req, res) => {
       // Emit stop event first to signal agent should stop
       console.log(`■ [stop] agent stopped`);
       addNarratorEvent('task_stop', `[Task ${taskId}] Stopping task...`);
+      
+      // Mark agent as stopped to prevent /mcp/agent/active from reporting it
+      try { if (agent && typeof agent === 'object') agent.status = 'stopped'; } catch (_) {}
+
+      // Remove any cursor overlays from all pages before closing
+      try {
+        await removeCursorFromAllPagesForAgent(agent);
+      } catch (_) {}
+      
+      // Do not summarize on stop; only summarize on successful completion
       
       // Try to stop gracefully if stop method exists
       if (agent && typeof agent.stop === 'function') {
@@ -1822,7 +2198,29 @@ app.get('/mcp/tools', (req, res) => {
         },
         required: ['description']
       }
-    }
+    },
+    // {
+    //   name: 'magnitude_request_intervention',
+    //   description: 'Ask the user to perform a required action (e.g., login or consent) and wait for their response',
+    //   inputSchema: {
+    //     type: 'object',
+    //     properties: {
+    //       message: {
+    //         type: 'string',
+    //         description: 'What you need the user to do'
+    //       },
+    //       context: {
+    //         type: 'string',
+    //         description: 'Optional additional context'
+    //       },
+    //       taskId: {
+    //         type: 'number',
+    //         description: 'Task identifier to associate the intervention with'
+    //       }
+    //     },
+    //     required: ['message']
+    //   }
+    // }
   ];
   
   res.json({ tools });
@@ -1852,6 +2250,119 @@ function createZodSchemaFromObject(schemaObj) {
   }
   
   return z.any();
+}
+
+// Remove visual cursor overlays from all pages in an agent's context
+async function removeCursorFromAllPagesForAgent(agent) {
+  try {
+    if (!agent || !agent.page || typeof agent.page.context !== 'function') return;
+    const context = agent.page.context();
+    const pages = context && typeof context.pages === 'function' ? context.pages() : [];
+    await Promise.all(pages.map(async (p) => {
+      try {
+        await p.evaluate(() => {
+          const ids = ['action-visual-indicator', 'custom-cursor'];
+          for (const id of ids) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+          }
+        });
+      } catch (_) {
+        // Ignore per-page errors (page may be closed or cross-origin)
+      }
+    }));
+  } catch (e) {
+    console.log(`[VisualCleanup] Failed to remove cursor overlays: ${e.message}`);
+  }
+}
+
+// Obtain a persistent Playwright context over the existing CDP connection (no LLM agent)
+async function getPersistentContext(browserInstanceId = null) {
+  // Prefer secure CDP with token when available; otherwise use configured CDP URL
+  let cdpUrl;
+  const cdpUrlObj = new URL(FIXED_CDP_URL);
+  const token = cdpUrlObj.searchParams.get('token');
+  if (token) {
+    cdpUrl = await resolveWsEndpoint(FIXED_CDP_URL);
+  } else if (process.env.USE_SECURE_CDP === 'true') {
+    const info = await waitForRegisteredConnection(browserInstanceId, 3000);
+    cdpUrl = await resolveWsEndpoint(info.cdp_url);
+  } else {
+    cdpUrl = FIXED_CDP_URL;
+  }
+  const browser = await chromium.connectOverCDP(cdpUrl);
+  let context = browser.contexts()[0];
+  if (!context) {
+    for (let i = 0; i < 10 && !context; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      context = browser.contexts()[0];
+    }
+  }
+  if (!context) throw new Error('Persistent Playwright context not available over CDP');
+  return { browser, context };
+}
+
+// Playwright helper: Open LinkedIn company's People tab
+async function open_company_people_tab(page, company_slug) {
+  const slug = (company_slug || '').toString().trim();
+  if (!slug) throw new Error('company_slug is required');
+  await page.goto(`https://www.linkedin.com/company/${slug}`, { waitUntil: 'domcontentloaded' });
+  const orgNav = page.getByRole('navigation', { name: "Organization's page navigation" });
+  await orgNav.waitFor({ state: 'visible' });
+  const peopleLink = orgNav.getByRole('link', { name: 'People' });
+  await peopleLink.waitFor({ state: 'visible' });
+  await peopleLink.click();
+  const searchBox = page.getByRole('textbox', { name: 'Search employees by title, keyword or school' });
+  await searchBox.waitFor({ state: 'visible' });
+  const employeeItems = page.getByRole('listitem');
+  await employeeItems.first().waitFor({ state: 'visible', timeout: 10000 });
+  const count = await employeeItems.count();
+  if (count === 0) {
+    throw new Error('People tab rendered but no employee entries were found.');
+  }
+  return { count };
+}
+
+
+
+// Build a summarization request message for the backend, including objective and timeline
+function buildSummaryRequestMessage(taskText, taskQueue, status = 'completed') {
+  try {
+    const events = Array.isArray(taskQueue?.events) ? taskQueue.events : [];
+    // Keep last 40 events max to bound the prompt size
+    const recent = events.slice(-40);
+    // Build timeline lines with type tags; trim messages
+    const lines = [];
+    for (const ev of recent) {
+      if (!ev || typeof ev.message !== 'string') continue;
+      const type = ev.type || 'event';
+      let msg = ev.message.trim();
+      if (!msg) continue;
+      if (msg.length > 300) msg = msg.slice(0, 297) + '…';
+      lines.push(`[${type}] ${msg}`);
+    }
+    const statusLine = status === 'completed' ? 'completed' : 'stopped';
+    const objective = (taskText || '').toString().trim();
+    const timeline = lines.join('\n');
+    const prompt = [
+      'Please write a concise summary of the browser agent task outcome.',
+      `Objective: ${objective || '(unspecified)'}`,
+      `Task status: ${statusLine}`,
+      '',
+      'Focus on:',
+      '- the current achieved state/result,',
+      '- any key outcome the user should know.',
+      '- if the task was a research task provide all the relevant information the user should know.',
+      'Do NOT list step-by-step actions. Do NOT narrate clicks or navigation. Be direct about current state. These are actions you took.',
+      '',
+      'Timeline (for context):',
+      timeline || '(no timeline available)'
+    ].join('\n');
+    return prompt;
+  } catch (_e) {
+    const objective = (taskText || '').toString().trim();
+    return `Please summarize the outcome for: ${objective}. Focus on current state, not steps.`;
+  }
 }
 
 // Start server with enhanced initialization
@@ -1968,6 +2479,12 @@ app.get('/mcp/metrics', (req, res) => {
   });
 });
 
+// -------------------- Human Intervention Endpoints (disabled) --------------------
+// app.post('/mcp/intervention/request', (req, res) => { ... });
+// app.get('/mcp/intervention/pending', (req, res) => { ... });
+// app.get('/mcp/intervention/status/:taskId', (req, res) => { ... });
+// app.post('/mcp/intervention/respond/:taskId', (req, res) => { ... });
+
 // Connection pooling - get least loaded browser
 app.get('/mcp/browser/recommend', (req, res) => {
   let recommendedBrowser = null;
@@ -2014,34 +2531,118 @@ app.get('/mcp/browser/recommend', (req, res) => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\nShutting down gracefully...');
-  
-  // Clean up connection cleanup interval
-  cleanupExpiredConnections();
-  
-  // Disconnect secure IPC client
-  if (secureIPCClient) {
-    secureIPCClient.disconnect();
-    console.log('Disconnected secure IPC client');
+// Enhanced graceful shutdown with recovery
+let isShuttingDown = false;
+const shutdownTimeout = 5000; // 5 second timeout for graceful shutdown
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log('Already shutting down, forcing exit...');
+    process.exit(1);
   }
   
-  // Stop all browser agents
+  isShuttingDown = true;
+  console.log(`\nReceived ${signal}, shutting down gracefully...`);
+  
+  // Set a timeout to force exit if graceful shutdown takes too long
+  const forceExitTimer = setTimeout(() => {
+    console.error('Graceful shutdown timed out, forcing exit');
+    process.exit(1);
+  }, shutdownTimeout);
+  
+  try {
+    // Clean up connection cleanup interval
+    cleanupExpiredConnections();
+    
+    // Disconnect secure IPC client
+    if (secureIPCClient) {
+      secureIPCClient.disconnect();
+      console.log('Disconnected secure IPC client');
+    }
+    
+    // Stop all browser agents
+    const stopPromises = [];
+    for (const [taskId, agent] of browserAgents) {
+      stopPromises.push(
+        agent.stop()
+          .then(() => console.log(`Stopped agent for task ${taskId}`))
+          .catch(error => console.error(`Error stopping agent ${taskId}:`, error))
+      );
+    }
+    
+    // Wait for all agents to stop with a timeout
+    await Promise.race([
+      Promise.all(stopPromises),
+      new Promise(resolve => setTimeout(resolve, 3000))
+    ]);
+    
+    // Clean up all event queues
+    for (const [taskId, queue] of taskEventQueues) {
+      queue.destroy();
+      console.log(`Cleaned up event queue for task ${taskId}`);
+    }
+    
+    clearTimeout(forceExitTimer);
+    console.log('Graceful shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    clearTimeout(forceExitTimer);
+    process.exit(1);
+  }
+}
+
+// Register signal handlers
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+
+// Handle uncaught errors to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  metrics.errors.uncaught_exceptions++;
+  
+  // Don't exit on uncaught exceptions, try to recover
+  // But log it for monitoring
+  if (!isShuttingDown) {
+    console.error('Server continuing despite uncaught exception');
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  metrics.errors.unhandled_rejections++;
+  
+  // Don't exit on unhandled rejections, try to recover
+  if (!isShuttingDown) {
+    console.error('Server continuing despite unhandled rejection');
+  }
+});
+
+// Heartbeat mechanism to detect stalled server
+let lastHeartbeat = Date.now();
+const heartbeatInterval = setInterval(() => {
+  const now = Date.now();
+  const elapsed = now - lastHeartbeat;
+  
+  if (elapsed > 60000) { // If no heartbeat for 60 seconds
+    console.error('Server appears stalled, restarting...');
+    gracefulShutdown('STALL');
+  }
+  
+  lastHeartbeat = now;
+  
+  // Also check if we have zombie browser agents
   for (const [taskId, agent] of browserAgents) {
-    try {
-      await agent.stop();
-      console.log(`Stopped agent for task ${taskId}`);
-    } catch (error) {
-      console.error(`Error stopping agent ${taskId}:`, error);
+    if (agent.createdAt && (now - agent.createdAt) > 300000) { // 5 minutes
+      console.warn(`Cleaning up zombie agent ${taskId}`);
+      agent.stop().catch(e => console.error(`Failed to stop zombie agent: ${e}`));
+      browserAgents.delete(taskId);
     }
   }
-  
-  // Clean up all event queues
-  for (const [taskId, queue] of taskEventQueues) {
-    queue.destroy();
-    console.log(`Cleaned up event queue for task ${taskId}`);
-  }
-  
-  process.exit(0);
+}, 10000); // Check every 10 seconds
+
+// Clear heartbeat on shutdown
+process.on('exit', () => {
+  clearInterval(heartbeatInterval);
 });

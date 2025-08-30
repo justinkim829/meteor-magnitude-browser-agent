@@ -108,33 +108,28 @@ export class WebHarness { // implements StateComponent
         }
 
         // Clear color scheme emulation for all existing pages to respect user preference
-        console.log('[MAGNITUDE] WebHarness starting - clearing color scheme emulation for all existing pages');
+        console.log('[MAGNITUDE] THEME: WebHarness starting - clearing color scheme emulation for all existing pages');
         for (const p of this.context.pages()) {
             try {
                 await p.emulateMedia({ colorScheme: null });
-                console.log('[MAGNITUDE] THEME FIX: Cleared color scheme emulation for existing page:', p.url());
+                console.log('[MAGNITUDE] THEME: Cleared color scheme emulation for existing page:', p.url());
             } catch (e) {
-                console.log('[MAGNITUDE] THEME FIX: Failed to clear color scheme emulation for existing page:', p.url(), e);
+                console.log('[MAGNITUDE] THEME: Failed to clear color scheme emulation for existing page:', p.url(), e);
             }
         }
         
         // Set up listener to clear color scheme emulation for any new pages created
         this.context.on('page', async (page) => {
             try {
-                console.log('[MAGNITUDE] New page created, clearing color scheme emulation:', page.url());
+                console.log('[MAGNITUDE] THEME: New page created, clearing color scheme emulation:', page.url());
                 await page.emulateMedia({ colorScheme: null });
-                console.log('[MAGNITUDE] THEME FIX: Successfully cleared color scheme emulation for new page');
+                console.log('[MAGNITUDE] THEME: Successfully cleared color scheme emulation for new page');
             } catch (e) {
-                console.log('[MAGNITUDE] THEME FIX: Failed to clear color scheme emulation for new page:', e);
+                console.log('[MAGNITUDE] THEME: Failed to clear color scheme emulation for new page:', e);
             }
-            // Adopt new non-chat pages as active if they were opened by the agent
-            try {
-                const url = page.url();
-                if (!url.includes('chrome://chat') && !url.includes('Meteor AI Chat')) {
-                    this.tabs.markPageAsAgentControlled(page);
-                    this.tabs.setActivePage(page);
-                }
-            } catch (_) { /* ignore */ }
+            // Do NOT auto-adopt new non-chat pages here. Adoption is handled explicitly
+            // when the agent opens a background tab or when a popup is triggered by an
+            // agent-initiated action. This prevents hijacking user tabs.
         });
 
         // Other logic for page tracking is automatically handled by TabManager
@@ -321,6 +316,19 @@ export class WebHarness { // implements StateComponent
         clickCount?: number;
         delay?: number;
     }) {
+        // Capture popups that are a direct consequence of this click so the agent can
+        // follow links that open in a new tab without hijacking user-created tabs.
+        // Register a one-time, non-blocking handler before the click.
+        const onPopup = async (popupPage: Page) => {
+            try {
+                const url = popupPage.url();
+                if (!url.includes('chrome://chat') && !url.includes('Meteor AI Chat')) {
+                    this.tabs.markPageAsAgentControlled(popupPage);
+                    this.tabs.setActivePage(popupPage);
+                }
+            } catch (_) { /* ignore */ }
+        };
+        this.page.once('popup', onPopup);
         await Promise.all([
             this.visualizer.moveVirtualCursor(x, y),
             this.page.mouse.move(x, y, { steps: 20 })
@@ -330,6 +338,8 @@ export class WebHarness { // implements StateComponent
         await this.visualizer.hideAll(); // hide / show pointer because no-pointer is not always consistent and visualizer can block click
         await this.page.mouse.click(x, y);
         await this.visualizer.showAll();
+
+        // No await; adoption will happen asynchronously if a popup occurs
     }
 
     async rightClick({ x, y }: { x: number, y: number }) {

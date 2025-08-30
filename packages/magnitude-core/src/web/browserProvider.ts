@@ -120,11 +120,11 @@ export class BrowserProvider {
         const contextOptions = {
             ...DEFAULT_BROWSER_CONTEXT_OPTIONS,
             deviceScaleFactor: dpr,
-            colorScheme: 'dark' as const, // Force dark mode to override Playwright's default light mode emulation
-            ...(options && 'contextOptions' in options && options.contextOptions ? options.contextOptions : {})//options.browser?.contextOptions
+            // Do NOT force a color scheme; respect the user's system/browser theme.
+            ...(options && 'contextOptions' in options && options.contextOptions ? options.contextOptions : {})
         };
         
-        console.log('[MAGNITUDE] DARK MODE FIX: Context options colorScheme set to:', contextOptions.colorScheme);
+        console.log('[MAGNITUDE] THEME: Respecting user color scheme; no forced emulation at context level');
 
         options = { ...options, contextOptions };
 
@@ -166,51 +166,49 @@ export class BrowserProvider {
                     console.log('[MAGNITUDE] DARK MODE FIX: Reusing existing persistent browser context (this preserves user session but may have color-scheme emulation)');
                     const context = browser.contexts()[0];
                     
-                    // Try to clear any browser-level emulation and set dark mode for existing pages
+                    // Avoid forcing color scheme; respect user's theme for existing pages
                     try {
                         const pages = context.pages();
                         if (pages.length > 0) {
                             for (const page of pages) {
-                                // Use Playwright's page-level emulation to force dark mode
-                                await page.emulateMedia({ colorScheme: 'dark' });
-                                console.log('[MAGNITUDE] DARK MODE FIX: Set page-level dark mode emulation for existing page:', page.url());
+                                await page.emulateMedia({ colorScheme: null });
+                                console.log('[MAGNITUDE] THEME: Cleared page-level color scheme emulation for existing page:', page.url());
                             }
                         }
                     } catch (e) {
-                        console.log('[MAGNITUDE] DARK MODE FIX: Failed to set page-level dark mode emulation on secure CDP context reuse:', e);
+                        console.log('[MAGNITUDE] THEME: Failed to clear page-level color scheme emulation on secure CDP context reuse:', e);
                     }
                     
                     return context;
                 } else {
-                    console.log('[MAGNITUDE] DARK MODE FIX: Creating new context in secure CDP browser with colorScheme:', options.contextOptions?.colorScheme);
+                    console.log('[MAGNITUDE] THEME: Creating new context in secure CDP browser (no color scheme override)');
                     return browser.newContext(options.contextOptions);
                 }
             } else {
                 // Regular CDP connection without token
                 this.logger.trace(`Connecting to CDP at ${options.cdp}`);
-                console.log('[MAGNITUDE] DARK MODE FIX: Connecting to insecure CDP - will reuse persistent browser context');
+                console.log('[MAGNITUDE] THEME: Connecting to insecure CDP - will reuse persistent browser context');
                 const browser = await chromium.connectOverCDP(options.cdp);
                 if (browser.contexts().length > 0) {
-                    console.log('[MAGNITUDE] DARK MODE FIX: Reusing existing persistent browser context (this preserves user session but may have color-scheme emulation)');
+                    console.log('[MAGNITUDE] THEME: Reusing existing persistent browser context (no color-scheme override)');
                     const context = browser.contexts()[0];
                     
-                    // Try to clear any browser-level emulation and set dark mode for existing pages
+                    // Avoid forcing color scheme; respect user's theme for existing pages
                     try {
                         const pages = context.pages();
                         if (pages.length > 0) {
                             for (const page of pages) {
-                                // Use Playwright's page-level emulation to force dark mode
-                                await page.emulateMedia({ colorScheme: 'dark' });
-                                console.log('[MAGNITUDE] DARK MODE FIX: Set page-level dark mode emulation for existing page:', page.url());
+                                await page.emulateMedia({ colorScheme: null });
+                                console.log('[MAGNITUDE] THEME: Cleared page-level color scheme emulation for existing page:', page.url());
                             }
                         }
                     } catch (e) {
-                        console.log('[MAGNITUDE] DARK MODE FIX: Failed to set page-level dark mode emulation on insecure CDP context reuse:', e);
+                        console.log('[MAGNITUDE] THEME: Failed to clear page-level color scheme emulation on insecure CDP context reuse:', e);
                     }
                     
                     return context;
                 } else {
-                    console.log('[MAGNITUDE] DARK MODE FIX: Creating new context in insecure CDP browser with colorScheme:', options.contextOptions?.colorScheme);
+                    console.log('[MAGNITUDE] THEME: Creating new context in insecure CDP browser (no color scheme override)');
                     return browser.newContext(options.contextOptions);
                 }
             }

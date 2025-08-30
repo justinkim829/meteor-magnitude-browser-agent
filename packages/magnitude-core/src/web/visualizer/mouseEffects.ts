@@ -17,7 +17,7 @@ export class MouseEffectVisual {
     private page!: Page;
 
     constructor(options: MouseEffectOptions = {}) {
-        this.baseOpacity = options.baseOpacity ?? 0.5;
+        this.baseOpacity =  0.0;
         this.showHoverCircle = options.showHoverCircle ?? true;
         this.showClickRipple = options.showClickRipple ?? true;
         this.showDragLine = options.showDragLine ?? true;
@@ -57,7 +57,7 @@ export class MouseEffectVisual {
                     height: 20px;
                     border: 2px solid rgba(0, 150, 255, ${options.opacity});
                     border-radius: 50%;
-                    background: rgba(0, 150, 255, ${options.opacity * 0.5});
+                    background: rgba(0, 150, 255, ${options.opacity * 0});
                     pointer-events: none;
                     z-index: 1000000050;
                     transition: transform 0.1s ease-out;
@@ -248,69 +248,72 @@ export class MouseEffectVisual {
             // Scroll visualization
             let scrollTimeout: ReturnType<typeof setTimeout> | undefined;
             let scrollArrow: HTMLElement | null = null;
+            const enableScrollArrows = false; // Disabled per product request
 
-            // Create the single scroll arrow
-            scrollArrow = document.createElement('div');
-            scrollArrow.style.cssText = `
-                position: fixed;
-                width: 40px;
-                height: 40px;
-                font-size: 24px;
-                color: #0096ff;
-                text-align: center;
-                line-height: 40px;
-                pointer-events: none;
-                z-index: 1000000045;
-                display: none;
-                transition: transform 0.1s ease-out, opacity 0.2s ease-out;
-            `;
-            document.body.appendChild(scrollArrow);
+            if (enableScrollArrows) {
+                // Create the single scroll arrow
+                scrollArrow = document.createElement('div');
+                scrollArrow.style.cssText = `
+                    position: fixed;
+                    width: 40px;
+                    height: 40px;
+                    font-size: 24px;
+                    color: #0096ff;
+                    text-align: center;
+                    line-height: 40px;
+                    pointer-events: none;
+                    z-index: 1000000045;
+                    display: none;
+                    transition: transform 0.1s ease-out, opacity 0.2s ease-out;
+                `;
+                document.body.appendChild(scrollArrow);
 
-            // Handle both wheel and scroll events
-            const handleScroll = (e: WheelEvent) => {
-                if (!scrollArrow) return;
-                
-                // Skip if no vertical scroll
-                if (Math.abs(e.deltaY) < 0.5) return;
-                
-                // Clear existing timeout
-                if (scrollTimeout) {
-                    clearTimeout(scrollTimeout);
-                }
-
-                // Update arrow
-                const scrollDirection = e.deltaY > 0 ? 'down' : 'up';
-                scrollArrow.textContent = scrollDirection === 'down' ? '▼' : '▲';
-                
-                // Position above/below cursor based on direction
-                // Arrow is 40px tall, cursor is ~20px, add 10px spacing
-                const offset = scrollDirection === 'down' ? 30 : -30;
-                scrollArrow.style.left = `${e.clientX - 20}px`;
-                scrollArrow.style.top = `${e.clientY + offset - 20}px`; // -20 to account for arrow center
-                
-                // Scale based on deltaY magnitude
-                const scale = 0.8 + Math.min(Math.abs(e.deltaY) / 10, 0.4);
-                scrollArrow.style.transform = `scale(${scale})`;
-                scrollArrow.style.opacity = '0.4';
-                scrollArrow.style.display = 'block';
-
-                // Hide after scroll stops
-                scrollTimeout = setTimeout(() => {
-                    if (scrollArrow) {
-                        scrollArrow.style.opacity = '0';
-                        setTimeout(() => {
-                            if (scrollArrow) scrollArrow.style.display = 'none';
-                        }, 200);
+                // Handle both wheel and scroll events
+                const handleScroll = (e: WheelEvent) => {
+                    if (!scrollArrow) return;
+                    
+                    // Skip if no vertical scroll
+                    if (Math.abs(e.deltaY) < 0.5) return;
+                    
+                    // Clear existing timeout
+                    if (scrollTimeout) {
+                        clearTimeout(scrollTimeout);
                     }
-                }, 150);
-            };
 
-            // Add event listeners for both wheel and scroll events
-            document.addEventListener('wheel', handleScroll, { passive: true });
-            
-            // Also listen to scroll events on window and document.body for better compatibility
-            window.addEventListener('wheel', handleScroll, { passive: true });
-            document.body.addEventListener('wheel', handleScroll, { passive: true });
+                    // Update arrow
+                    const scrollDirection = e.deltaY > 0 ? 'down' : 'up';
+                    scrollArrow.textContent = scrollDirection === 'down' ? '▼' : '▲';
+                    
+                    // Position above/below cursor based on direction
+                    // Arrow is 40px tall, cursor is ~20px, add 10px spacing
+                    const offset = scrollDirection === 'down' ? 30 : -30;
+                    scrollArrow.style.left = `${e.clientX - 20}px`;
+                    scrollArrow.style.top = `${e.clientY + offset - 20}px`; // -20 to account for arrow center
+                    
+                    // Scale based on deltaY magnitude
+                    const scale = 0.8 + Math.min(Math.abs(e.deltaY) / 10, 0.4);
+                    scrollArrow.style.transform = `scale(${scale})`;
+                    scrollArrow.style.opacity = '0.4';
+                    scrollArrow.style.display = 'block';
+
+                    // Hide after scroll stops
+                    scrollTimeout = setTimeout(() => {
+                        if (scrollArrow) {
+                            scrollArrow.style.opacity = '0';
+                            setTimeout(() => {
+                                if (scrollArrow) scrollArrow.style.display = 'none';
+                            }, 200);
+                        }
+                    }, 150);
+                };
+
+                // Add event listeners for both wheel and scroll events
+                document.addEventListener('wheel', handleScroll, { passive: true });
+                
+                // Also listen to scroll events on window and document.body for better compatibility
+                window.addEventListener('wheel', handleScroll, { passive: true });
+                document.body.addEventListener('wheel', handleScroll, { passive: true });
+            }
 
             // Hide cursor when it leaves the viewport
             document.addEventListener('mouseleave', () => {
