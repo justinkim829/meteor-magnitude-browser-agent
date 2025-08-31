@@ -61,7 +61,7 @@ export class AgentMemory {
             instructions: options?.instructions ?? null,
             promptCaching: options?.promptCaching ?? false,
             //optimizeForPromptCaching: false,
-            thoughtLimit: options?.thoughtLimit ?? 20
+            thoughtLimit: options?.thoughtLimit ?? 50
         };
     }
 

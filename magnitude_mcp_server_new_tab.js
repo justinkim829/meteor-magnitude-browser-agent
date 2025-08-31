@@ -25,6 +25,8 @@ const __dirname = dirname(__filename);
 // Direct hardcoded API keys - no external dependencies
 let cachedSecrets = {
   ANTHROPIC_API_KEY: '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',
+  OPENAI_API_KEY: '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',
+  BRAVE_SEARCH_API_KEY: 'BSAHyFJjyHZPwR5J2o_vKsrKqN0PDwo',
   MCP_API_KEY: 'default-mcp-key',
   BROWSER_API_KEY: 'default-browser-key',
   initialized: true,
@@ -34,6 +36,10 @@ let cachedSecrets = {
 
 // Helper function to get cached secret
 function getSecret(key) {
+  // Prefer env override if present, then cached value
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
+  }
   return cachedSecrets[key];
 }
 
@@ -162,6 +168,227 @@ function validateEncryptionKeys(encryptionKey, authKey) {
   } catch (error) {
     console.error(`[Security] Key validation failed: ${error.message}`);
     return { valid: false, error: error.message };
+  }
+}
+
+// -------------------------------------------------------------
+// Enhanced Prompt Utilities (Brave enrichment + OpenAI synthesis)
+// -------------------------------------------------------------
+async function withTimeout(promise, ms, label = 'operation') {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  try {
+    // If the promise supports signal, pass controller.signal in the caller
+    return await promise;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      console.warn(`[EnhancePrompt] ${label} timed out after ${ms}ms`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function braveSearchTop(query, { count = 8, timeoutMs = 3000 } = {}) {
+  try {
+    console.log(`[EnhancePrompt] braveSearchTop: query="${(query||'').toString().slice(0,120)}" count=${count} timeoutMs=${timeoutMs}`);
+    const token = getSecret('BRAVE_SEARCH_API_KEY') || process.env.BRAVE_SEARCH_API_KEY;
+    if (!token || !query) return [];
+    const url = new URL('https://api.search.brave.com/res/v1/web/search');
+    url.searchParams.set('q', query);
+    url.searchParams.set('count', String(count));
+    url.searchParams.set('spellcheck', '1');
+    url.searchParams.set('country', 'us');
+    const headers = { 'X-Subscription-Token': token };
+    const res = await withTimeout(fetch(url.toString(), { headers }), timeoutMs, 'Brave search');
+    if (!res.ok) return [];
+    const body = await res.json();
+    const results = [];
+    const seenHosts = new Set();
+    const webResults = (body && body.web && Array.isArray(body.web.results)) ? body.web.results : (Array.isArray(body.results) ? body.results : []);
+    for (const r of webResults) {
+      const urlStr = r.url || r.link || '';
+      let host = '';
+      try { host = new URL(urlStr).hostname.replace(/^www\./, ''); } catch (_) {}
+      if (!urlStr || seenHosts.has(host)) continue;
+      seenHosts.add(host);
+      results.push({ title: r.title || '', url: urlStr, description: r.description || r.snippet || '' });
+      if (results.length >= count) break;
+    }
+    console.log(`[EnhancePrompt] braveSearchTop: uniqueSources=${results.length}`);
+    return results;
+  } catch (_) {
+    console.warn('[EnhancePrompt] braveSearchTop: failed, returning empty results');
+    return [];
+  }
+}
+
+function renderHistoryTaste(searchHistory) {
+  if (!Array.isArray(searchHistory) || searchHistory.length === 0) return '';
+  const items = searchHistory.slice(-20).map((h) => {
+    const ts = h.timestamp ? new Date(h.timestamp).toISOString() : '';
+    const q = (h.query || '').toString().trim();
+    const d = Array.isArray(h.domains) ? ` domains=${h.domains.slice(0,3).join(',')}` : '';
+    return `- ${ts} :: ${q}${d}`;
+  });
+  return items.join('\n');
+}
+
+async function synthesizeEnhancedPrompt({ task, searchHistory, braveSources }) {
+  try {
+    const apiKey = getSecret('OPENAI_API_KEY') || process.env.OPENAI_API_KEY;
+    if (!apiKey) return '';
+    // Use only o3-mini for enhancement (reasoning model via Responses API)
+    const modelCandidates = ['o3-mini'];
+    // Build inputs for the exact user-provided enhancement prompt
+    const taste = renderHistoryTaste(searchHistory);
+    const searchHistoryText = (taste && taste.trim().length > 0) ? taste : '(none)';
+    const webSearchText = (Array.isArray(braveSources) && braveSources.length > 0)
+      ? braveSources.map((s) => `- ${s.title || s.url} (${s.url})${s.description ? ` — ${String(s.description).slice(0,180)}` : ''}`).join('\n')
+      : '(none)';
+
+    // EXACT prompt as a single string with variables filled
+    const exactPrompt = `You are a “prompt enhancer”, taking in a user prompt which describes a web automation the user wants to perform. Your enhanced prompt will be given to a browser agent to perform the web automation. Your job is to enhance the prompt the user gave, adding in personal taste specific to the user and add details into the prompt so that the browser agent starts a task with more thorough description.
+
+Here is the user’s prompt: ${(task || '').toString()}
+
+To give you more context, here is the search history of the past 7 days of the user: ${searchHistoryText}
+
+Here is the search results that appear when you directly add the user prompt as a query and perform a web search: ${webSearchText}
+
+You want to “enhance” the prompt in 3 aspects:
+1. Personalization (adding taste)
+For example, suppose the user prompt is “Find me headphones to buy” and looking into the search history, you notice that the user often buys products from Amazon. Then, you might want to enhance the prompt to “Find me headphones to buy. Prioritize looking for options in Amazon.”
+
+2. Make the prompt more thorough.
+We want our browser agent to be thorough. Suppose the user prompt is “find the one-way cheapest flight from SEA to SFO tomorrow”. If we gave this prompt without any enhancements, the browser agent might just look into one flight website to find the cheapest flight and end the task. Think about how a thoughtful and thorough person would do the user’s task if they had to manually perform it. That person would look into at least 3 flight websites to find the cheapest flight options in each of them, compare/contrast between them, and give the absolute cheapest option. 
+
+For another example, suppose the user prompt is “I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle.” We absolutely do not want the browser agent to go and book the first movie they look appears in the theater website. Again, how would a thorough and thoughtful person do the same task? After seeing the movie options that are available, that person would ask questions like “is this movie appropriate to watch with my girlfriend at date night?”, “what seat position should I select?”, “what are the reviews of the movies I am considering?” and might perform additional browsing to make sure that the chosen movie is appropriate and was chosen after careful considerations. Thus, you can enhance the prompt to something like “I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle. Approach step by step. First, look into at least 2 theaters near that location, look at the images for each of those theaters, and select the theater which has the most romantic and aesthetic surroundings. Do NOT stop until you find a beautiful theater that is nearby. Second, go into that theater website and browse the top 3 movies that are available tomorrow around dinner. For each of those movies, perform additional searches to see the reviews of them. After careful examination, carefully think to choose the movie that is the best option to watch with my girlfriend considering my situation. Lastly, book the movie. Find seats near the center back of the theater.”
+
+You can also add into detail with your existing knowledge. For example, if the user prompt is “I am a CS major. Go to my LinkedIn to read my work history, then create a resume.” We know that Jake’s Resume Template is a famous template used by cs majors to create their resume. Thus, you can enhance the prompt to “I am a CS major. Go to my LinkedIn to read my work history, then create a resume. Use Jake’s resume template and create the resume in Overleaf”. 
+
+3. Add in warnings to prompts
+It is always good to add in lines like “Approach step by step. You should NEVER stop until ALL tasks are FULLY complete. Take your time. It is MUCH better to spend your time to perform a thorough automation rather than doing the bare minimum of the task specifications”. For example, if the user’s prompt is “accept all my 400 LinkedIn Connections”, you want to make sure that all 400 connection requests are accepted before the browser agent stops. Thus, you can enhance to “accept all my 400 LinkedIn Connections. You should NEVER stop until EVERY SINGLE connection request is accepted. That means you have to accept 400 times.”
+
+Another example could be if the user prompt is "find the cheapest headphones in Amazon". Even though you found the cheapest headphones available, you want to make sure if it not a scam. Thus, you can enhance the prompt to "find the cheapest headphones in Amazon. Make sure to check the reviews and ratings of the headphones to make sure that the cheapest option is not a scam."
+
+To summarize, you want to enhance the user’s prompt so that the browser agent executes the user’s will in a more thorough and thoughtful way. You have the ability to generate the prompt to give to the browser agent, so you have very high responsibility. You MUST think into depth what the user wants to achieve and how a thorough and thoughtful person would execute the task if that person had to manually perform it, and enhance the user prompt so that the browser agent also performs the task in that manner. 
+
+It would be much better if the browser agent performs the task in a thorough manner than to do the bare minimum of the user requirements. Do NOT overwrite the user prompt (e.g. the user wants to create a resume in Google Doc, you should NOT decide to choose Overleaf).
+
+Do not overfit to the examples I gave you but rather think what a thoughtful and thorough person would do if they had to manually perform the user's prompt. It is not required to make use of search history and web search results if it does not make sense to do so.
+
+Your response should be ONLY the enhanced prompt with no other text. Your response is going to be directly given to the browser agent without any parsing.`;
+
+    const hCount = Array.isArray(searchHistory) ? searchHistory.length : 0;
+    const sCount = Array.isArray(braveSources) ? braveSources.length : 0;
+    console.log(`[EnhancePrompt] Synthesis inputs: taskLen=${(task||'').toString().length} history=${hCount} sources=${sCount}`);
+    if (hCount > 0) {
+      try {
+        const sample = renderHistoryTaste(Array.isArray(searchHistory) ? searchHistory.slice(-5) : []);
+        console.log(`[EnhancePrompt] Sample history taste (last 5): ${sample.replace(/\n/g,' | ').slice(0,200)}`);
+      } catch (_e) {}
+    }
+    console.log(`[EnhancePrompt] Model trial order: ${modelCandidates.join(' -> ')}`);
+
+    // Try candidates in order: prefer Responses API with reasoning when appropriate,
+    // fall back to Responses without reasoning or Chat Completions for broad compatibility.
+    for (const model of modelCandidates) {
+      try {
+        const isReasoningModel = /^o[34](-|$)/.test(model);
+        console.log(`[EnhancePrompt] Using OpenAI model: ${model} (reasoning=${isReasoningModel})`);
+
+        if (true) { // Prefer Responses API for all models per current docs
+          const body = {
+            model,
+            ...(isReasoningModel ? { reasoning: { effort: 'medium' } } : {}),
+            max_output_tokens: 1024,
+            input: [
+              { role: 'user', content: [ { type: 'input_text', text: exactPrompt } ] }
+            ]
+          };
+          const res = await withTimeout(fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          }), 15000, 'OpenAI responses synthesis');
+          if (!res.ok) {
+            console.warn(`[EnhancePrompt] Responses synthesis failed for model=${model}: status=${res.status}`);
+            continue;
+          }
+          const json = await res.json();
+          const out = (json && Array.isArray(json.output)) ? json.output : [];
+          const textPieces = [];
+          for (const p of out) {
+            if (!p) continue;
+            if (p.type === 'message') {
+              const contents = Array.isArray(p.content) ? p.content : (p.message && Array.isArray(p.message.content) ? p.message.content : []);
+              for (const c of contents) {
+                if (!c) continue;
+                if ((c.type === 'output_text' || c.type === 'text' || c.type === 'reasoning_text') && typeof c.text === 'string') {
+                  textPieces.push(c.text);
+                }
+              }
+            } else if (p.type === 'output_text' && typeof p.text === 'string') {
+              textPieces.push(p.text);
+            } else if (p.type === 'summary_text' && typeof p.text === 'string') {
+              textPieces.push(p.text);
+            }
+          }
+          let finalText = (textPieces.join('\n') || '').toString().trim();
+          if (!finalText && typeof json.output_text === 'string') {
+            finalText = json.output_text.toString().trim();
+          }
+          if (!finalText && Array.isArray(json.output_text)) {
+            finalText = json.output_text.filter(s => typeof s === 'string').join('\n').trim();
+          }
+          if (finalText) {
+            console.log(`[EnhancePrompt] Synthesis OK (responses, model=${model}): chars=${finalText.length} preview="${finalText.slice(0,200).replace(/\n/g,' ')}"`);
+            return finalText;
+          }
+          console.warn(`[EnhancePrompt] Empty output with Responses API for model=${model}`);
+          continue;
+        }
+      } catch (err) {
+        console.warn(`[EnhancePrompt] Synthesis attempt failed for model=${model}: ${err?.message || String(err)}`);
+        // Try Chat Completions as a last resort for non-reasoning models only
+        try {
+          if (!/^o[34](-|$)/.test(model)) {
+            const res2 = await withTimeout(fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model,
+                temperature: 0.2,
+                messages: [
+                  { role: 'user', content: exactPrompt }
+                ]
+              })
+            }), 10000, 'OpenAI chat synthesis (fallback)');
+            if (res2.ok) {
+              const json2 = await res2.json();
+              const text = json2 && json2.choices && json2.choices[0] && json2.choices[0].message && json2.choices[0].message.content;
+              const finalText2 = (text || '').toString().trim();
+              if (finalText2) {
+                console.log(`[EnhancePrompt] Synthesis OK (chat, model=${model}): chars=${finalText2.length} preview="${finalText2.slice(0,200).replace(/\n/g,' ')}"`);
+                return finalText2;
+              }
+            } else {
+              console.warn(`[EnhancePrompt] Chat synthesis failed for model=${model}: status=${res2.status}`);
+            }
+          }
+        } catch (fallbackErr) {
+          console.warn(`[EnhancePrompt] Chat fallback failed for model=${model}: ${fallbackErr?.message || String(fallbackErr)}`);
+        }
+      }
+    }
+
+    console.warn('[EnhancePrompt] All model attempts failed, returning empty prompt');
+    return '';
+  } catch (e) {
+    console.error(`[EnhancePrompt] Synthesis error: ${e && e.message ? e.message : String(e)}`);
+    return '';
   }
 }
 
@@ -857,7 +1084,7 @@ async function waitForRegisteredConnection(browserInstanceId, maxWaitMs = 8000) 
 }
 
 // Helper function to create a new browser agent for each task
-async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
+async function createBrowserAgentForTask(taskId, browserInstanceId = null, enhancedPrompt = '') {
   try {
     // Creating new browser agent for task
     
@@ -900,8 +1127,8 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
             promptCaching: true
           }
         },
-        // Add agent prompt to guide human intervention usage
-        prompt: buildAgentPrompt(),
+        // Combine existing guidance with enhancedPrompt (if provided)
+        prompt: [enhancedPrompt || '', buildAgentPrompt()].filter(Boolean).join('\n\n'),
         visuals: {
           showCursor: true,
           showHoverCircle: false,
@@ -951,7 +1178,7 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
               promptCaching: true
             }
           },
-          // prompt: buildAgentPrompt(),
+          prompt: enhancedPrompt || undefined,
           visuals: {
             showCursor: false,
             showHoverCircle: false,
@@ -997,7 +1224,7 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null) {
           promptCaching: true
         }
       },
-      // prompt: buildAgentPrompt(),
+      prompt: enhancedPrompt || undefined,
       // Visual configuration - disable all effects, including cursor and keyboard overlay
       visuals: {
         showCursor: false,
@@ -1651,6 +1878,7 @@ app.get('/mcp/events/stream/:taskId', (req, res) => {
   
   // Send any unacknowledged events
   const unacknowledged = taskQueue.getUnacknowledged();
+  console.log(`[SSE] Task ${taskId}: replaying ${unacknowledged.length} queued events on connect`);
   unacknowledged.forEach(event => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   });
@@ -1761,7 +1989,7 @@ app.get('/mcp/agent/active', async (req, res) => {
 
 // Fixed Execute endpoint with proper event handling
 app.post('/mcp/execute', async (req, res) => {
-  const { task, mode = 'act', url, data, schema, browser_instance_id } = req.body;
+  const { task, mode = 'act', url, data, schema, browser_instance_id, search_history, enhance_prompt } = req.body;
   const taskId = taskIdCounter++;
   
   // Return immediately with task ID
@@ -1776,6 +2004,7 @@ app.post('/mcp/execute', async (req, res) => {
     // Create task event queue FIRST
     const taskQueue = new TaskEventQueue(taskId);
     taskEventQueues.set(taskId, taskQueue);
+    console.log(`[EnhancePrompt] Task ${taskId}: queue created, size=${taskQueue.events.length}`);
     
     // Define console restoration function at the top level
     const originalLog = console.log;
@@ -1788,8 +2017,38 @@ app.post('/mcp/execute', async (req, res) => {
     };
     
     try {
-      // Create a new browser agent for this task (opens new tab)
-      const browserAgent = await createBrowserAgentForTask(taskId, browser_instance_id);
+      // Optionally compute an enhanced prompt before starting the agent
+      let enhancedPrompt = '';
+      const doEnhance = (enhance_prompt !== false); // default true
+      console.log(`[EnhancePrompt] Task ${taskId}: doEnhance=${doEnhance} history_present=${Array.isArray(search_history)} hist_count=${Array.isArray(search_history)?search_history.length:0}`);
+      if (doEnhance) {
+        try {
+          const braveSources = await braveSearchTop(task, { count: 8, timeoutMs: 3000 });
+          enhancedPrompt = await synthesizeEnhancedPrompt({ task, searchHistory: search_history, braveSources });
+          console.log(`[EnhancePrompt] Task ${taskId}: enhancedPrompt chars=${enhancedPrompt.length}`);
+        } catch (e) {
+          console.warn(`[EnhancePrompt] Task ${taskId}: enhancement failed: ${e && e.message ? e.message : String(e)}`);
+          enhancedPrompt = '';
+        }
+      }
+
+      // Stream the enhanced prompt as first thought if available
+      if (enhancedPrompt) {
+        try {
+          const preview = enhancedPrompt.slice(0, 160).replace(/\n/g, ' ');
+          console.log(`[EnhancePrompt] Task ${taskId}: enqueue first thought preview="${preview}"`);
+          // Prefix a brief label to make intent obvious in UI
+          taskQueue.addEvent('thought', `Personalized plan:\n\n${enhancedPrompt}`);
+          console.log(`[EnhancePrompt] Task ${taskId}: queue size after enqueue=${taskQueue.events.length}`);
+        } catch (e) {
+          console.warn(`[EnhancePrompt] Task ${taskId}: failed to enqueue enhanced thought: ${e && e.message ? e.message : String(e)}`);
+        }
+      } else {
+        console.log(`[EnhancePrompt] Task ${taskId}: no enhancedPrompt to enqueue`);
+      }
+
+      // Create a new browser agent for this task (opens new tab), passing enhanced prompt
+      const browserAgent = await createBrowserAgentForTask(taskId, browser_instance_id, enhancedPrompt);
       browserAgents.set(taskId, browserAgent);
       
       // Detect an explicit "done" signal and immediately surface a task_complete node once
@@ -1969,7 +2228,7 @@ app.post('/mcp/execute', async (req, res) => {
       // Execute based on mode (no action event messages)
       switch (mode) {
         case 'act':
-          result = await browserAgent.act(task, { data });
+          result = await browserAgent.act(task, { data, prompt: enhancedPrompt || undefined });
           break;
           
         case 'extract':
@@ -1979,7 +2238,8 @@ app.post('/mcp/execute', async (req, res) => {
           
         case 'verify':
         case 'check':
-          result = await browserAgent.check(task);
+          // Runtime BrowserAgent does not implement check; return graceful error
+          throw new Error('verify/check not supported in runtime agent');
           break;
           
         default:
