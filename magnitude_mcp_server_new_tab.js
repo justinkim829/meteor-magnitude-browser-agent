@@ -249,7 +249,7 @@ Again, your answer should only be the query string to web search, not anything e
       reasoning: { effort: 'minimal' },
       text: { format: { type: 'text' }, verbosity: 'low' },
       tool_choice: 'none',
-      input: [
+      input: [  
         { role: 'user', content: [
           { type: 'input_text', text: instruction },
           { type: 'input_text', text: `Task: ${String(task)}` }
@@ -335,6 +335,10 @@ To give you more context, here is the search history of the past 7 days of the u
 
 Here are the search results that appear for "${displayQuery}" for reference: ${webSearchText}
 
+Even if the user prompt is not clear or lacks details, you should enhance the prompt so that the browser agent explores first to fill in those details that are ambiguous.
+
+For example, if the user prompt is "What are some github repos I might be interested in?", you could enhance the prompt so that the browser agent first tries to read the user's github profile and repositories to understand the user's interests before looking for github repos to recommend.
+
 You want to “enhance” the prompt in ALL 4 aspects:
 
 1. Personalization (adding taste)
@@ -356,9 +360,9 @@ For example, if the user prompt is "Find me courses to take at UW the following 
 
 For another example, if the user prompt is "Find me groceries in Amazon for this week", you would want to first check the previous orders of that user to understand what they typically buy. Do NOT overfit to the examples I gave you, but think carefully about how a thorough person would perform the task. They would ask questions like "What does the user typically buy?", "Any deals or discounts that the user might want to take?", etc. Thus, you can enhance the prompt to something like "find me groceries in Amazon for this week. Before you start looking for groceries, check the previous orders of the user to understand what they typically buy. Then, recommend groceries that are relevant to the user's typical purchases and any deals or discounts that the user might want to take."
 
-One more example could be if the user prompt is "Create a resume for Jinseok Kim", you want the browser agent to first do research to find who Jinseok Kim is. In general, if the user prompt mentions something/someone/some organization/some name you don't recognize, you should enhance the prompt to first research that out before resuming the task.
+One more example could be if the user prompt is "Create a resume for Jinseok Kim", you want the browser agent to first do research to find who Jinseok Kim is. In general, if the user prompt mentions something/someone/some organization/some name you don't recognize, you could enhance the prompt to first research that out before resuming the task.
 
-Since this aspect is crucial, I will give you one more example. If the user prompt is ‘Do my homework for ENGL288 in Canvas’, the browser agent should not simply locate the most recent homework and complete it. Instead, it should first go to Canvas and carefully review the course syllabus, the homework instructions, and the contents of previous lectures or readings. A thoughtful and thorough person — especially a grade-A student — would never just rush to finish the assignment. They would make sure they understand the context, expectations, and requirements in depth before producing the work. The browser agent should act with this same mindset, and you are responsible to enhance the prompt so that the browser agent acts this way.
+Since this aspect is crucial, I will give you one more example. If the user prompt is ‘Do my homework for ENGL288 in Canvas’, the browser agent should not simply locate the most recent homework and complete it. Instead, it could first go to Canvas and carefully review the course syllabus, the homework instructions, and the contents of previous lectures or readings. A thoughtful and thorough person — especially a grade-A student — would never just rush to finish the assignment. They would make sure they understand the context, expectations, and requirements in depth before producing the work. The browser agent should act with this same mindset, and you are responsible to enhance the prompt so that the browser agent acts this way.
 
 What would a thorough person "research" before starting the task? A thoughtful and thorough person would never attempt the task blindly — they would first gather the background knowledge needed to make good decisions. Think about it. 
 
@@ -2090,20 +2094,22 @@ app.get('/mcp/agent/active', async (req, res) => {
 app.post('/mcp/execute', async (req, res) => {
   const { task, mode = 'act', url, data, schema, browser_instance_id, search_history, enhance_prompt } = req.body;
   const taskId = taskIdCounter++;
-  
+
+  // Create task event queue BEFORE responding so SSE can attach immediately without race
+  const taskQueue = new TaskEventQueue(taskId);
+  taskEventQueues.set(taskId, taskQueue);
+  console.log(`[EnhancePrompt] Task ${taskId}: queue created (pre-response), size=${taskQueue.events.length}`);
+
   // Return immediately with task ID
   res.json({
     success: true,
     taskId,
     message: 'Task started in new tab'
   });
-  
+
   // Execute task asynchronously
   (async () => {
-    // Create task event queue FIRST
-    const taskQueue = new TaskEventQueue(taskId);
-    taskEventQueues.set(taskId, taskQueue);
-    console.log(`[EnhancePrompt] Task ${taskId}: queue created, size=${taskQueue.events.length}`);
+    // Queue already created above; continue with diagnostics
     // Diagnostics: track last thought/action to aid error debugging
     let __lastThought = null;
     let __lastAction = null;
