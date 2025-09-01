@@ -224,6 +224,83 @@ async function braveSearchTop(query, { count = 8, timeoutMs = 3000 } = {}) {
   }
 }
 
+// Generate a single web-search query from the user's task using gpt-5-nano
+async function generateSearchQueryFromTask(task) {
+  try {
+    const apiKey = getSecret('OPENAI_API_KEY') || process.env.OPENAI_API_KEY;
+    if (!apiKey || !task) return '';
+
+    const instruction = `Turn the user’s task into one web search query that targets the core subject(s) to get background context (not the action). No quotes, no explanations, no multiple queries. Output only the final query string to web search.
+
+Examples
+‘Create a resume for Jinseok Kim’ → Jinseok Kim
+‘Create a Slack channel for Browse.dev’ → Browse.dev
+‘Book dinner at Canlis in Seattle’ → Canlis Seattle
+‘Use the browser agent to book a movie ticket we can watch with my dad tomorrow after dinner near University Village, Seattle.’ -> movies to watch tomorrow at 7pm
+‘Use the browser agent to find the weather in SF’ -> Weather in SF
+‘Use the browser agent to go to chess.com and play a new game as a guest’ -> how to play a game as a guest in chess.com
+
+Again, your answer should only be the query string to web search, not anything else. Your response is directly going to be web searched without any parsing.`;
+
+    console.log(`[QueryGen] Using gpt-5-nano for query generation; taskLen=${String(task).length}`);
+    const body = {
+      model: 'gpt-5-nano',
+      max_output_tokens: 1024,
+      reasoning: { effort: 'minimal' },
+      text: { format: { type: 'text' }, verbosity: 'low' },
+      tool_choice: 'none',
+      input: [
+        { role: 'user', content: [
+          { type: 'input_text', text: instruction },
+          { type: 'input_text', text: `Task: ${String(task)}` }
+        ]}
+      ]
+    };
+
+    const res = await withTimeout(fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }), 8000, 'OpenAI query generation');
+
+    if (!res.ok) {
+      console.warn(`[QueryGen] Responses failed status=${res.status}`);
+      return '';
+    }
+    const json = await res.json();
+
+    const out = (json && Array.isArray(json.output)) ? json.output : [];
+    const textPieces = [];
+    for (const p of out) {
+      if (!p) continue;
+      if (p.type === 'message') {
+        const contents = Array.isArray(p.content) ? p.content : (p.message && Array.isArray(p.message.content) ? p.message.content : []);
+        for (const c of contents) {
+          if (!c) continue;
+          if ((c.type === 'output_text' || c.type === 'text' || c.type === 'reasoning_text') && typeof c.text === 'string') {
+            textPieces.push(c.text);
+          }
+        }
+      } else if (p.type === 'output_text' && typeof p.text === 'string') {
+        textPieces.push(p.text);
+      } else if (p.type === 'summary_text' && typeof p.text === 'string') {
+        textPieces.push(p.text);
+      }
+    }
+    let finalText = (textPieces.join('\n') || '').toString().trim();
+    if (!finalText && typeof json.output_text === 'string') finalText = json.output_text.toString().trim();
+    if (!finalText && Array.isArray(json.output_text)) finalText = json.output_text.filter(s => typeof s === 'string').join('\n').trim();
+
+    // Sanitize: single line, strip surrounding quotes/backticks
+    const query = (finalText || '').replace(/^\s*["'`]|["'`]\s*$/g, '').split('\n').map(s => s.trim()).filter(Boolean)[0] || '';
+    console.log(`[QueryGen] Generated query: "${query.slice(0, 160)}"`);
+    return query;
+  } catch (e) {
+    console.warn(`[QueryGen] Failed: ${e && e.message ? e.message : String(e)}`);
+    return '';
+  }
+}
+
 function renderHistoryTaste(searchHistory) {
   if (!Array.isArray(searchHistory) || searchHistory.length === 0) return '';
   const items = searchHistory.slice(-20).map((h) => {
@@ -235,7 +312,7 @@ function renderHistoryTaste(searchHistory) {
   return items.join('\n');
 }
 
-async function synthesizeEnhancedPrompt({ task, searchHistory, braveSources }) {
+async function synthesizeEnhancedPrompt({ task, searchHistory, braveSources, webQuery }) {
   try {
     const apiKey = getSecret('OPENAI_API_KEY') || process.env.OPENAI_API_KEY;
     if (!apiKey) return '';
@@ -247,6 +324,7 @@ async function synthesizeEnhancedPrompt({ task, searchHistory, braveSources }) {
     const webSearchText = (Array.isArray(braveSources) && braveSources.length > 0)
       ? braveSources.map((s) => `- ${s.title || s.url} (${s.url})${s.description ? ` — ${String(s.description).slice(0,180)}` : ''}`).join('\n')
       : '(none)';
+    const displayQuery = (webQuery && String(webQuery).trim().length) ? String(webQuery).trim() : String(task || '').trim();
 
     // EXACT prompt as a single string with variables filled
     const exactPrompt = `You are a “prompt enhancer”, taking in a user prompt which describes a web automation the user wants to perform. Your enhanced prompt will be given to a browser agent to perform the web automation. Your job is to enhance the prompt the user gave, adding in personal taste specific to the user and add details into the prompt so that the browser agent starts a task with more thorough description.
@@ -255,29 +333,50 @@ Here is the user’s prompt: ${(task || '').toString()}
 
 To give you more context, here is the search history of the past 7 days of the user: ${searchHistoryText}
 
-Here is the search results that appear when you directly add the user prompt as a query and perform a web search: ${webSearchText}
+Here are the search results that appear for "${displayQuery}" for reference: ${webSearchText}
 
-You want to “enhance” the prompt in 3 aspects:
+You want to “enhance” the prompt in ALL 4 aspects:
+
 1. Personalization (adding taste)
 For example, suppose the user prompt is “Find me headphones to buy” and looking into the search history, you notice that the user often buys products from Amazon. Then, you might want to enhance the prompt to “Find me headphones to buy. Prioritize looking for options in Amazon.”
 
-2. Make the prompt more thorough.
+2. Add details into the user prompt so that the browser agent performs the task in a thorough manner.
+
 We want our browser agent to be thorough. Suppose the user prompt is “find the one-way cheapest flight from SEA to SFO tomorrow”. If we gave this prompt without any enhancements, the browser agent might just look into one flight website to find the cheapest flight and end the task. Think about how a thoughtful and thorough person would do the user’s task if they had to manually perform it. That person would look into at least 3 flight websites to find the cheapest flight options in each of them, compare/contrast between them, and give the absolute cheapest option. 
 
 For another example, suppose the user prompt is “I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle.” We absolutely do not want the browser agent to go and book the first movie they look appears in the theater website. Again, how would a thorough and thoughtful person do the same task? After seeing the movie options that are available, that person would ask questions like “is this movie appropriate to watch with my girlfriend at date night?”, “what seat position should I select?”, “what are the reviews of the movies I am considering?” and might perform additional browsing to make sure that the chosen movie is appropriate and was chosen after careful considerations. Thus, you can enhance the prompt to something like “I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle. Approach step by step. First, look into at least 2 theaters near that location, look at the images for each of those theaters, and select the theater which has the most romantic and aesthetic surroundings. Do NOT stop until you find a beautiful theater that is nearby. Second, go into that theater website and browse the top 3 movies that are available tomorrow around dinner. For each of those movies, perform additional searches to see the reviews of them. After careful examination, carefully think to choose the movie that is the best option to watch with my girlfriend considering my situation. Lastly, book the movie. Find seats near the center back of the theater.”
 
 You can also add into detail with your existing knowledge. For example, if the user prompt is “I am a CS major. Go to my LinkedIn to read my work history, then create a resume.” We know that Jake’s Resume Template is a famous template used by cs majors to create their resume. Thus, you can enhance the prompt to “I am a CS major. Go to my LinkedIn to read my work history, then create a resume. Use Jake’s resume template and create the resume in Overleaf”. 
 
-3. Add in warnings to prompts
-It is always good to add in lines like “Approach step by step. You should NEVER stop until ALL tasks are FULLY complete. Take your time. It is MUCH better to spend your time to perform a thorough automation rather than doing the bare minimum of the task specifications”. For example, if the user’s prompt is “accept all my 400 LinkedIn Connections”, you want to make sure that all 400 connection requests are accepted before the browser agent stops. Thus, you can enhance to “accept all my 400 LinkedIn Connections. You should NEVER stop until EVERY SINGLE connection request is accepted. That means you have to accept 400 times.”
+3. IMPORTANT: Always gather the necessary context before acting so the output is relevant, complete, and accurate.
+
+A thoughtful and thorough person would never attempt the task blindly — they would first gather the background knowledge needed to make good decisions. The browser agent should mirror this same mindset: pause, collect the relevant context, and only then proceed.
+
+For example, if the user prompt is "Find me courses to take at UW the following quarter using MyPlan." In this case, you don't want the browser agent to just go and recommend any courses. How would a thorough person perform this user task? They would first go and find out the major of that user and all courses that the user took, the graduation requirements. Then, they would recommend courses that are relevant to the user's major and graduation requirements. Thus, you can enhance the prompt to "Find me courses to take at UW the following quarter using MyPlan. Before you start looking for courses for the upcoming quarter, find out my major and all courses that the I took, the graduation requirements, etc. Then, recommend courses that are relevant to the my major/interests and graduation requirements."
+
+For another example, if the user prompt is "Find me groceries in Amazon for this week", you would want to first check the previous orders of that user to understand what they typically buy. Do NOT overfit to the examples I gave you, but think carefully about how a thorough person would perform the task. They would ask questions like "What does the user typically buy?", "Any deals or discounts that the user might want to take?", etc. Thus, you can enhance the prompt to something like "find me groceries in Amazon for this week. Before you start looking for groceries, check the previous orders of the user to understand what they typically buy. Then, recommend groceries that are relevant to the user's typical purchases and any deals or discounts that the user might want to take."
+
+One more example could be if the user prompt is "Create a resume for Jinseok Kim", you want the browser agent to first do research to find who Jinseok Kim is. In general, if the user prompt mentions something/someone/some organization/some name you don't recognize, you should enhance the prompt to first research that out before resuming the task.
+
+Since this aspect is crucial, I will give you one more example. If the user prompt is ‘Do my homework for ENGL288 in Canvas’, the browser agent should not simply locate the most recent homework and complete it. Instead, it should first go to Canvas and carefully review the course syllabus, the homework instructions, and the contents of previous lectures or readings. A thoughtful and thorough person — especially a grade-A student — would never just rush to finish the assignment. They would make sure they understand the context, expectations, and requirements in depth before producing the work. The browser agent should act with this same mindset, and you are responsible to enhance the prompt so that the browser agent acts this way.
+
+What would a thorough person "research" before starting the task? A thoughtful and thorough person would never attempt the task blindly — they would first gather the background knowledge needed to make good decisions. Think about it. 
+
+4. Add in completion and quality rules
+It is always good to add in lines like “Approach step by step. You should NEVER stop until ALL tasks are FULLY complete. Even if you think you completed everything, look at the current state to confirm that you performed the task in high quality before calling the task complete. Take your time. It is MUCH better to spend your time to perform a thorough automation rather than doing the bare minimum of the task specifications”. For example, if the user’s prompt is “accept all my 400 LinkedIn Connections”, you want to make sure that all 400 connection requests are accepted before the browser agent stops. Thus, you can enhance to “accept all my 400 LinkedIn Connections. You should NEVER stop until EVERY SINGLE connection request is accepted. That means you have to accept 400 times.”
 
 Another example could be if the user prompt is "find the cheapest headphones in Amazon". Even though you found the cheapest headphones available, you want to make sure if it not a scam. Thus, you can enhance the prompt to "find the cheapest headphones in Amazon. Make sure to check the reviews and ratings of the headphones to make sure that the cheapest option is not a scam."
 
-To summarize, you want to enhance the user’s prompt so that the browser agent executes the user’s will in a more thorough and thoughtful way. You have the ability to generate the prompt to give to the browser agent, so you have very high responsibility. You MUST think into depth what the user wants to achieve and how a thorough and thoughtful person would execute the task if that person had to manually perform it, and enhance the user prompt so that the browser agent also performs the task in that manner. Assume that the browser agent will not be as thorough unless you explicitly make the prompt thorough and mention the steps to take and the things to consider.
+There should be no world in which the browser agent ends the task before it is fully completed because it takes a long time, task is hard to do, agent wants to ask clarification, or any other reason.
+________________________________________________________________________________
 
-It would be much better if the browser agent performs the task in a thorough manner than to do the bare minimum of the user requirements. Do NOT overwrite the user prompt (e.g. the user wants to create a resume in Google Doc, you should NOT decide to choose Overleaf).
+To summarize, you want to enhance the user’s prompt so that the browser agent executes the user’s will in a more thorough and thoughtful way. You have the ability to generate the prompt to give to the browser agent, so you have very high responsibility. You MUST think into depth what the user wants to achieve and how a thorough and thoughtful person would execute the task if that person had to manually perform it, and enhance the user prompt so that the browser agent also performs the task in that manner. Assume that the browser agent will not be as thorough unless you explicitly mention the steps to take and the things to consider.
 
-Do not overfit to the examples I gave you but rather think what a thoughtful and thorough person would do if they had to manually perform the user's prompt. It is not required to make use of search history and web search results if it does not make sense to do so.
+Do NOT overwrite the user prompt. It is not required to make use of search history and web search results if it does not make sense to do so.
+
+MOST IMPORTANT: You should NOT overfit to the examples I gave you. The goal is not to rewrite the prompt mechanically, but to channel the mindset of a thoughtful, thorough person performing the task carefully, step by step, making sure nothing important is missed.
+
+Again, we want the browser agent to adopt the mindset of a highly responsible worker — someone whose livelihood depends on delivering high quality results. Such a worker would never approach the task carelessly or half-heartedly. That worker would even go the extra mile to ensure the user is fully satisfied.
 
 Your response should be ONLY the enhanced prompt with no other text. Your response is going to be directly given to the browser agent without any parsing.`;
 
@@ -2005,6 +2104,9 @@ app.post('/mcp/execute', async (req, res) => {
     const taskQueue = new TaskEventQueue(taskId);
     taskEventQueues.set(taskId, taskQueue);
     console.log(`[EnhancePrompt] Task ${taskId}: queue created, size=${taskQueue.events.length}`);
+    // Diagnostics: track last thought/action to aid error debugging
+    let __lastThought = null;
+    let __lastAction = null;
     
     // Define console restoration function at the top level
     const originalLog = console.log;
@@ -2023,8 +2125,10 @@ app.post('/mcp/execute', async (req, res) => {
       console.log(`[EnhancePrompt] Task ${taskId}: doEnhance=${doEnhance} history_present=${Array.isArray(search_history)} hist_count=${Array.isArray(search_history)?search_history.length:0}`);
       if (doEnhance) {
         try {
-          const braveSources = await braveSearchTop(task, { count: 8, timeoutMs: 3000 });
-          enhancedPrompt = await synthesizeEnhancedPrompt({ task, searchHistory: search_history, braveSources });
+          // Derive a background-context search query from the user task
+          const webQuery = await generateSearchQueryFromTask(task);
+          const braveSources = await braveSearchTop(webQuery || task, { count: 8, timeoutMs: 3000 });
+          enhancedPrompt = await synthesizeEnhancedPrompt({ task, searchHistory: search_history, braveSources, webQuery });
           console.log(`[EnhancePrompt] Task ${taskId}: enhancedPrompt chars=${enhancedPrompt.length}`);
         } catch (e) {
           console.warn(`[EnhancePrompt] Task ${taskId}: enhancement failed: ${e && e.message ? e.message : String(e)}`);
@@ -2035,7 +2139,7 @@ app.post('/mcp/execute', async (req, res) => {
       // Stream the enhanced prompt as first thought if available
       if (enhancedPrompt) {
         try {
-          const preview = enhancedPrompt.slice(0, 160).replace(/\n/g, ' ');
+          const preview = enhancedPrompt.slice(0, 300).replace(/\n/g, ' ');
           console.log(`[EnhancePrompt] Task ${taskId}: enqueue first thought preview="${preview}"`);
           // Prefix a brief label to make intent obvious in UI
           taskQueue.addEvent('thought', `Personalized plan:\n\n${enhancedPrompt}`);
@@ -2079,6 +2183,7 @@ app.post('/mcp/execute', async (req, res) => {
         eventSource.on('thought', (thought) => {
           const thoughtStr = String(thought);
           const now = Date.now();
+          __lastThought = thoughtStr;
           
           // Check for duplicate thought within time window
           if (recentThoughts.has(thoughtStr)) {
@@ -2115,12 +2220,14 @@ app.post('/mcp/execute', async (req, res) => {
             try {
               const name = (action && (action.name || action.type || action.id)) ? String(action.name || action.type || action.id) : '';
               if (name) taskQueue.addEvent('action', name);
+              if (name) __lastAction = name;
             } catch (_) {}
           });
           // Detect explicit task:done action to surface completion immediately
           browserAgent.browserAgentEvents.on('action', (action) => {
             try {
               const name = (action && (action.name || action.type || action.id)) ? String(action.name || action.type || action.id) : '';
+              if (name) __lastAction = name;
               if (!doneEventSent && name.toLowerCase() === 'task:done') {
                 taskQueue.addEvent('task_complete', 'Task completed successfully');
                 doneEventSent = true;
@@ -2208,6 +2315,7 @@ app.post('/mcp/execute', async (req, res) => {
             if (isThought) {
               // Just the thought directly, no task prefix
               taskQueue.addEvent('thought', text);
+              __lastThought = text;
             }
           }
           
@@ -2302,6 +2410,12 @@ app.post('/mcp/execute', async (req, res) => {
         } catch (_) {}
       } else {
         console.error(`Error executing task ${taskId}:`, error);
+        try {
+          const lt = __lastThought ? __lastThought.replace(/\n/g, ' ').slice(0, 400) : '(none)';
+          const la = __lastAction ? __lastAction.toString() : '(none)';
+          console.error(`[Diagnostics] Task ${taskId} last thought: ${lt}`);
+          console.error(`[Diagnostics] Task ${taskId} last action: ${la}`);
+        } catch (_) {}
         taskQueue.addEvent('error', error.message);
         
         // Check if this is a token-related error
@@ -2894,7 +3008,7 @@ const heartbeatInterval = setInterval(() => {
   
   // Also check if we have zombie browser agents
   for (const [taskId, agent] of browserAgents) {
-    if (agent.createdAt && (now - agent.createdAt) > 300000) { // 5 minutes
+    if (agent.createdAt && (now - agent.createdAt) > 3000000) { // 50 minutes
       console.warn(`Cleaning up zombie agent ${taskId}`);
       agent.stop().catch(e => console.error(`Failed to stop zombie agent: ${e}`));
       browserAgents.delete(taskId);
