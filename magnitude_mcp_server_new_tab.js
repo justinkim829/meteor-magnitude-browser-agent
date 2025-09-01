@@ -2133,6 +2133,15 @@ app.post('/mcp/execute', async (req, res) => {
         try {
           // Derive a background-context search query from the user task
           const webQuery = await generateSearchQueryFromTask(task);
+          try {
+            // Emit an early planning status so UI can show pills before enhancement completes
+            const safeQ = (webQuery || '').toString().replace(/\n/g, ' ').slice(0, 300);
+            if (typeof safeQ === 'string') {
+              taskQueue.addEvent('status', `planning_query:${safeQ}`);
+            } else {
+              taskQueue.addEvent('status', 'planning_query:');
+            }
+          } catch (_) {}
           const braveSources = await braveSearchTop(webQuery || task, { count: 8, timeoutMs: 3000 });
           enhancedPrompt = await synthesizeEnhancedPrompt({ task, searchHistory: search_history, braveSources, webQuery });
           console.log(`[EnhancePrompt] Task ${taskId}: enhancedPrompt chars=${enhancedPrompt.length}`);
