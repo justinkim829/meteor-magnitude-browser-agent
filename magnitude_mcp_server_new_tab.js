@@ -112,6 +112,8 @@ const validateApiKey = (req, res, next) => {
 const PORT = process.env.MAGNITUDE_MCP_PORT || process.env.MAGNITUDE_PORT || 9123;
 const CDP_URL = process.env.CDP_URL || 'http://localhost:9222';
 const SECURE_IPC_SOCKET = process.env.SECURE_IPC_SOCKET;
+const METEOR_BACKEND_URL = process.env.METEOR_BACKEND_URL || 'http://localhost:8000';
+const FAVICON_SIZE = parseInt(process.env.FAVICON_SIZE || '32', 10);
 
 
 
@@ -168,6 +170,28 @@ function validateEncryptionKeys(encryptionKey, authKey) {
   } catch (error) {
     console.error(`[Security] Key validation failed: ${error.message}`);
     return { valid: false, error: error.message };
+  }
+}
+
+// --- Favicon helpers (backend data-URI) -------------------------------------
+const _faviconCache = new Map(); // key: pageUrl|size -> data_uri
+async function fetchFaviconDataUri(pageUrl, size = FAVICON_SIZE, timeoutMs = 2500) {
+  try {
+    if (!pageUrl) return null;
+    const key = `${pageUrl}|${size}`;
+    if (_faviconCache.has(key)) return _faviconCache.get(key);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const url = `${METEOR_BACKEND_URL}/favicon/data-uri?url=${encodeURIComponent(pageUrl)}&size=${size}`;
+    const resp = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const data = (json && typeof json.data_uri === 'string') ? json.data_uri : null;
+    if (data && data.startsWith('data:')) _faviconCache.set(key, data);
+    return data || null;
+  } catch (_e) {
+    return null;
   }
 }
 
@@ -1104,13 +1128,8 @@ class TaskEventQueue {
 async function getSecureBrowserConnection(browserInstanceId) {
   // If no browser instance specified, try to use any registered browser
   if (!browserInstanceId) {
-    // Find first non-expired browser
-    for (const [id, info] of browserConnections) {
-      if (new Date() < info.expiry) {
-        browserInstanceId = id;
-        break;
-      }
-    }
+    // Pick any registered browser (no expiry)
+    for (const [id, info] of browserConnections) { browserInstanceId = id; break; }
   }
   
   if (!browserInstanceId) {
@@ -1141,12 +1160,8 @@ async function waitForRegisteredConnection(browserInstanceId, maxWaitMs = 8000) 
       return info;
     } catch (err) {
       lastError = err;
-      // As a fallback, try any non-expired registered browser
-      for (const [id, info] of browserConnections) {
-        if (new Date() < info.expiry) {
-          return info;
-        }
-      }
+      // As a fallback, try any registered browser
+      for (const [id, info] of browserConnections) { return info; }
       await sleep(250);
     }
   }
@@ -1568,7 +1583,7 @@ app.post('/register-browser', (req, res) => {
   }
   
   // Full registration mode - require all fields
-  if (!cdp_port || !cdp_token || !token_expiry) {
+  if (!cdp_port || !cdp_token) {
     return res.status(400).json({ error: 'Missing required fields for full registration' });
   }
   
@@ -1672,13 +1687,7 @@ app.post('/exchange-keys', (req, res) => {
     });
   }
   
-  // Check if the temporary registration has expired
-  if (new Date() > connectionInfo.expires_at) {
-    browserConnections.delete(browser_instance_id);
-    return res.status(410).json({ 
-      error: 'Key exchange window expired. Please re-register.' 
-    });
-  }
+  // Do not enforce temporary registration expiry
   
   // Validate encryption keys with enhanced validation
   const keyValidation = validateEncryptionKeys(encryption_key, auth_key);
@@ -1821,8 +1830,8 @@ app.get('/registered-browsers', (req, res) => {
       browser_instance: id,
       port: info.port,
       registered_at: info.registered_at,
-      expires_at: info.expiry,
-      is_expired: new Date() > info.expiry
+      expires_at: null,
+      is_expired: false
     });
   }
   res.json({ browsers });
@@ -1866,26 +1875,7 @@ app.post('/refresh-token/:browserInstanceId', (req, res) => {
   });
 });
 
-// Connection management - cleanup expired connections
-const cleanupExpiredConnections = () => {
-  const now = new Date();
-  let cleanedCount = 0;
-  
-  for (const [id, info] of browserConnections) {
-    if (now > info.expiry) {
-      browserConnections.delete(id);
-      cleanedCount++;
-      console.log(`[Cleanup] Removed expired browser connection: ${id}`);
-    }
-  }
-  
-  if (cleanedCount > 0) {
-    console.log(`[Cleanup] Cleaned up ${cleanedCount} expired browser connections`);
-  }
-};
-
-// Run cleanup every 5 minutes
-setInterval(cleanupExpiredConnections, 5 * 60 * 1000);
+// Disable expiry-based cleanup; keep connections until explicit unregister
 
 // Unregister browser endpoint
 app.post('/unregister-browser', (req, res) => {
@@ -2130,7 +2120,30 @@ app.post('/mcp/execute', async (req, res) => {
               } catch (_) {}
             }
             if (top.length) {
-              taskQueue.addEvent('planning_sources', JSON.stringify(top));
+              try {
+                // Fetch favicons via backend (data URIs) with small concurrency
+                const withIcons = [];
+                const maxConc = 4;
+                let idx = 0;
+                const worker = async () => {
+                  while (idx < top.length) {
+                    const i = idx++;
+                    const entry = top[i];
+                    const pageUrl = entry.url;
+                    const dataUri = await fetchFaviconDataUri(pageUrl).catch(() => null);
+                    if (dataUri && typeof dataUri === 'string' && dataUri.startsWith('data:')) {
+                      withIcons[i] = { ...entry, favicon_url: dataUri };
+                    } else {
+                      withIcons[i] = { ...entry };
+                    }
+                  }
+                };
+                const runners = Array.from({ length: Math.min(maxConc, top.length) }, () => worker());
+                await Promise.all(runners);
+                taskQueue.addEvent('planning_sources', JSON.stringify(withIcons));
+              } catch (_e) {
+                taskQueue.addEvent('planning_sources', JSON.stringify(top));
+              }
             }
           } catch (_) {}
           enhancedPrompt = await synthesizeEnhancedPrompt({ task, searchHistory: search_history, braveSources, webQuery });
@@ -2859,11 +2872,7 @@ app.get('/mcp/browser/recommend', (req, res) => {
   
   // Count tasks per browser
   const taskCounts = new Map();
-  for (const [browserId, info] of browserConnections) {
-    if (new Date() < info.expiry) {
-      taskCounts.set(browserId, 0);
-    }
-  }
+  for (const [browserId, info] of browserConnections) { taskCounts.set(browserId, 0); }
   
   // Count active tasks per browser
   for (const [taskId, agent] of browserAgents) {
@@ -2887,7 +2896,7 @@ app.get('/mcp/browser/recommend', (req, res) => {
       current_tasks: minTasks,
       connection_info: {
         port: browserConnections.get(recommendedBrowser).port,
-        expires_at: browserConnections.get(recommendedBrowser).expiry
+        expires_at: null
       }
     });
   } else {
@@ -2999,14 +3008,7 @@ const heartbeatInterval = setInterval(() => {
   
   lastHeartbeat = now;
   
-  // Also check if we have zombie browser agents
-  for (const [taskId, agent] of browserAgents) {
-    if (agent.createdAt && (now - agent.createdAt) > 3000000) { // 50 minutes
-      console.warn(`Cleaning up zombie agent ${taskId}`);
-      agent.stop().catch(e => console.error(`Failed to stop zombie agent: ${e}`));
-      browserAgents.delete(taskId);
-    }
-  }
+  // Disable zombie cleanup: long-running agents are allowed
 }, 10000); // Check every 10 seconds
 
 // Clear heartbeat on shutdown
