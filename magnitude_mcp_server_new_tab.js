@@ -2101,6 +2101,14 @@ app.post('/mcp/execute', async (req, res) => {
             } else {
               taskQueue.addEvent('status', 'planning_query:');
             }
+            // Also schedule the planning thought 1s later so it appears under the planning node
+            setTimeout(() => {
+              try {
+                const safeTask = (task ?? '').toString();
+                const planningThought = `The user wants me to perform \"${safeTask}\". I need to carefully plan out next steps to perform a thorough and personalized automation specific to our user.`;
+                taskQueue.addEvent('thought', planningThought);
+              } catch (_) {}
+            }, 1000);
           } catch (_) {}
           const braveSources = await braveSearchTop(webQuery || task, { count: 12, timeoutMs: 3000 });
           try {
@@ -2154,20 +2162,16 @@ app.post('/mcp/execute', async (req, res) => {
         }
       }
 
-      // Stream the enhanced prompt as first thought if available
-      if (enhancedPrompt) {
-        try {
-          const preview = enhancedPrompt.slice(0, 300).replace(/\n/g, ' ');
-          console.log(`[EnhancePrompt] Task ${taskId}: enqueue first thought preview="${preview}"`);
-          // Prefix a brief label to make intent obvious in UI
-          taskQueue.addEvent('thought', `Personalized plan:\n\n${enhancedPrompt}`);
-          console.log(`[EnhancePrompt] Task ${taskId}: queue size after enqueue=${taskQueue.events.length}`);
-        } catch (e) {
-          console.warn(`[EnhancePrompt] Task ${taskId}: failed to enqueue enhanced thought: ${e && e.message ? e.message : String(e)}`);
-        }
-      } else {
-        console.log(`[EnhancePrompt] Task ${taskId}: no enhancedPrompt to enqueue`);
-      }
+      // Schedule the planning thought 1s after planning node creation (post-planning_query)
+      try {
+        setTimeout(() => {
+          try {
+            const safeTask = (task ?? '').toString();
+            const planningThought = `The user wants me to perform "${safeTask}". I need to carefully plan out next steps to perform a thorough and personalized automation specific to our user.`;
+            taskQueue.addEvent('thought', planningThought);
+          } catch (_) {}
+        }, 1000);
+      } catch (_) {}
 
       // Create a new browser agent for this task (opens new tab), passing enhanced prompt
       const browserAgent = await createBrowserAgentForTask(taskId, browser_instance_id, enhancedPrompt);
