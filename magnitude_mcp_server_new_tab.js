@@ -117,7 +117,7 @@ const SECURE_IPC_SOCKET = process.env.SECURE_IPC_SOCKET;
 
 // Protocol version and capabilities for enhanced registration
 const PROTOCOL_VERSION = "1.0";
-const SUPPORTED_CAPABILITIES = ["encrypted_communication", "token_rotation", "key_exchange"];
+const SUPPORTED_CAPABILITIES = ["encrypted_communication", "key_exchange"];
 
 // Encryption key validation and recovery
 // Note: crypto is already imported at the top
@@ -230,15 +230,15 @@ async function generateSearchQueryFromTask(task) {
     const apiKey = getSecret('OPENAI_API_KEY') || process.env.OPENAI_API_KEY;
     if (!apiKey || !task) return '';
 
-    const instruction = `Turn the user’s task into one web search query that targets the core subject(s) to get background context (not the action). No quotes, no explanations, no multiple queries. Output only the final query string to web search.
+    const instruction = `Turn the user's task into one web search query that targets the core subject(s) to get background context (not the action). No quotes, no explanations, no multiple queries. Output only the final query string to web search.
 
 Examples
-‘Create a resume for Jinseok Kim’ → Jinseok Kim
-‘Create a Slack channel for Browse.dev’ → Browse.dev
-‘Book dinner at Canlis in Seattle’ → Canlis Seattle
-‘Use the browser agent to book a movie ticket we can watch with my dad tomorrow after dinner near University Village, Seattle.’ -> movies to watch tomorrow at 7pm
-‘Use the browser agent to find the weather in SF’ -> Weather in SF
-‘Use the browser agent to go to chess.com and play a new game as a guest’ -> how to play a game as a guest in chess.com
+'Create a resume for Jinseok Kim' → Jinseok Kim
+'Create a Slack channel for Browse.dev' → Browse.dev
+'Book dinner at Canlis in Seattle' → Canlis Seattle
+'Use the browser agent to book a movie ticket we can watch with my dad tomorrow after dinner near University Village, Seattle.' -> movies to watch tomorrow at 7pm
+'Use the browser agent to find the weather in SF' -> Weather in SF
+'Use the browser agent to go to chess.com and play a new game as a guest' -> how to play a game as a guest in chess.com
 
 Again, your answer should only be the query string to web search, not anything else. Your response is directly going to be web searched without any parsing.`;
 
@@ -327,9 +327,9 @@ async function synthesizeEnhancedPrompt({ task, searchHistory, braveSources, web
     const displayQuery = (webQuery && String(webQuery).trim().length) ? String(webQuery).trim() : String(task || '').trim();
 
     // EXACT prompt as a single string with variables filled
-    const exactPrompt = `You are a “prompt enhancer”, taking in a user prompt which describes a web automation the user wants to perform. Your enhanced prompt will be given to a browser agent to perform the web automation. Your job is to enhance the prompt the user gave, adding in personal taste specific to the user and add details into the prompt so that the browser agent starts a task with more thorough description.
+    const exactPrompt = `You are a "prompt enhancer", taking in a user prompt which describes a web automation the user wants to perform. Your enhanced prompt will be given to a browser agent to perform the web automation. Your job is to enhance the prompt the user gave, adding in personal taste specific to the user and add details into the prompt so that the browser agent starts a task with more thorough description.
 
-Here is the user’s prompt: ${(task || '').toString()}
+Here is the user's prompt: ${(task || '').toString()}
 
 To give you more context, here is the search history of the past 7 days of the user: ${searchHistoryText}
 
@@ -339,18 +339,18 @@ Even if the user prompt is not clear or lacks details, you should enhance the pr
 
 For example, if the user prompt is "What are some github repos I might be interested in?", you could enhance the prompt so that the browser agent first tries to read the user's github profile and repositories to understand the user's interests before looking for github repos to recommend.
 
-You want to “enhance” the prompt in ALL 4 aspects:
+You want to "enhance" the prompt in ALL 4 aspects:
 
 1. Personalization (adding taste)
-For example, suppose the user prompt is “Find me headphones to buy” and looking into the search history, you notice that the user often buys products from Amazon. Then, you might want to enhance the prompt to “Find me headphones to buy. Prioritize looking for options in Amazon.”
+For example, suppose the user prompt is "Find me headphones to buy" and looking into the search history, you notice that the user often buys products from Amazon. Then, you might want to enhance the prompt to "Find me headphones to buy. Prioritize looking for options in Amazon."
 
 2. Add details into the user prompt so that the browser agent performs the task in a thorough manner.
 
-We want our browser agent to be thorough. Suppose the user prompt is “find the one-way cheapest flight from SEA to SFO tomorrow”. If we gave this prompt without any enhancements, the browser agent might just look into one flight website to find the cheapest flight and end the task. Think about how a thoughtful and thorough person would do the user’s task if they had to manually perform it. That person would look into at least 3 flight websites to find the cheapest flight options in each of them, compare/contrast between them, and give the absolute cheapest option. 
+We want our browser agent to be thorough. Suppose the user prompt is "find the one-way cheapest flight from SEA to SFO tomorrow". If we gave this prompt without any enhancements, the browser agent might just look into one flight website to find the cheapest flight and end the task. Think about how a thoughtful and thorough person would do the user's task if they had to manually perform it. That person would look into at least 3 flight websites to find the cheapest flight options in each of them, compare/contrast between them, and give the absolute cheapest option. 
 
-For another example, suppose the user prompt is “I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle.” We absolutely do not want the browser agent to go and book the first movie they look appears in the theater website. Again, how would a thorough and thoughtful person do the same task? After seeing the movie options that are available, that person would ask questions like “is this movie appropriate to watch with my girlfriend at date night?”, “what seat position should I select?”, “what are the reviews of the movies I am considering?” and might perform additional browsing to make sure that the chosen movie is appropriate and was chosen after careful considerations. Thus, you can enhance the prompt to something like “I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle. Approach step by step. First, look into at least 2 theaters near that location, look at the images for each of those theaters, and select the theater which has the most romantic and aesthetic surroundings. Do NOT stop until you find a beautiful theater that is nearby. Second, go into that theater website and browse the top 3 movies that are available tomorrow around dinner. For each of those movies, perform additional searches to see the reviews of them. After careful examination, carefully think to choose the movie that is the best option to watch with my girlfriend considering my situation. Lastly, book the movie. Find seats near the center back of the theater.”
+For another example, suppose the user prompt is "I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle.". We absolutely do not want the browser agent to go and book the first movie they look appears in the theater website. Again, how would a thorough and thoughtful person do the same task? After seeing the movie options that are available, that person would ask questions like "is this movie appropriate to watch with my girlfriend at date night?", "what seat position should I select?", "what are the reviews of the movies I am considering?" and might perform additional browsing to make sure that the chosen movie is appropriate and was chosen after careful considerations. Thus, you can enhance the prompt to something like "I have a date night with my girlfriend tomorrow. Book a movie ticket we can watch after dinner near University Village, Seattle. Approach step by step. First, look into at least 2 theaters near that location, look at the images for each of those theaters, and select the theater which has the most romantic and aesthetic surroundings. Do NOT stop until you find a beautiful theater that is nearby. Second, go into that theater website and browse the top 3 movies that are available tomorrow around dinner. For each of those movies, perform additional searches to see the reviews of them. After careful examination, carefully think to choose the movie that is the best option to watch with my girlfriend considering my situation. Lastly, book the movie. Find seats near the center back of the theater.". 
 
-You can also add into detail with your existing knowledge. For example, if the user prompt is “I am a CS major. Go to my LinkedIn to read my work history, then create a resume.” We know that Jake’s Resume Template is a famous template used by cs majors to create their resume. Thus, you can enhance the prompt to “I am a CS major. Go to my LinkedIn to read my work history, then create a resume. Use Jake’s resume template and create the resume in Overleaf”. 
+You can also add into detail with your existing knowledge. For example, if the user prompt is "I am a CS major. Go to my LinkedIn to read my work history, then create a resume.". We know that Jake's Resume Template is a famous template used by cs majors to create their resume. Thus, you can enhance the prompt to "I am a CS major. Go to my LinkedIn to read my work history, then create a resume. Use Jake's resume template and create the resume in Overleaf". 
 
 3. IMPORTANT: Always gather the necessary context before acting so the output is relevant, complete, and accurate.
 
@@ -362,19 +362,19 @@ For another example, if the user prompt is "Find me groceries in Amazon for this
 
 One more example could be if the user prompt is "Create a resume for Jinseok Kim", you want the browser agent to first do research to find who Jinseok Kim is. In general, if the user prompt mentions something/someone/some organization/some name you don't recognize, you could enhance the prompt to first research that out before resuming the task.
 
-Since this aspect is crucial, I will give you one more example. If the user prompt is ‘Do my homework for ENGL288 in Canvas’, the browser agent should not simply locate the most recent homework and complete it. Instead, it could first go to Canvas and carefully review the course syllabus, the homework instructions, and the contents of previous lectures or readings. A thoughtful and thorough person — especially a grade-A student — would never just rush to finish the assignment. They would make sure they understand the context, expectations, and requirements in depth before producing the work. The browser agent should act with this same mindset, and you are responsible to enhance the prompt so that the browser agent acts this way.
+Since this aspect is crucial, I will give you one more example. If the user prompt is 'Do my homework for ENGL288 in Canvas', the browser agent should not simply locate the most recent homework and complete it. Instead, it could first go to Canvas and carefully review the course syllabus, the homework instructions, and the contents of previous lectures or readings. A thoughtful and thorough person — especially a grade-A student — would never just rush to finish the assignment. They would make sure they understand the context, expectations, and requirements in depth before producing the work. The browser agent should act with this same mindset, and you are responsible to enhance the prompt so that the browser agent acts this way.
 
 What would a thorough person "research" before starting the task? A thoughtful and thorough person would never attempt the task blindly — they would first gather the background knowledge needed to make good decisions. Think about it. 
 
 4. Add in completion and quality rules
-It is always good to add in lines like “Approach step by step. You should NEVER stop until ALL tasks are FULLY complete. Even if you think you completed everything, look at the current state to confirm that you performed the task in high quality before calling the task complete. Take your time. It is MUCH better to spend your time to perform a thorough automation rather than doing the bare minimum of the task specifications”. For example, if the user’s prompt is “accept all my 400 LinkedIn Connections”, you want to make sure that all 400 connection requests are accepted before the browser agent stops. Thus, you can enhance to “accept all my 400 LinkedIn Connections. You should NEVER stop until EVERY SINGLE connection request is accepted. That means you have to accept 400 times.”
+It is always good to add in lines like "Approach step by step. You should NEVER stop until ALL tasks are FULLY complete. Even if you think you completed everything, look at the current state to confirm that you performed the task in high quality before calling the task complete. Take your time. It is MUCH better to spend your time to perform a thorough automation rather than doing the bare minimum of the task specifications". For example, if the user's prompt is "accept all my 400 LinkedIn Connections", you want to make sure that all 400 connection requests are accepted before the browser agent stops. Thus, you can enhance to "accept all my 400 LinkedIn Connections. You should NEVER stop until EVERY SINGLE connection request is accepted. That means you have to accept 400 times.".
 
-Another example could be if the user prompt is "find the cheapest headphones in Amazon". Even though you found the cheapest headphones available, you want to make sure if it not a scam. Thus, you can enhance the prompt to "find the cheapest headphones in Amazon. Make sure to check the reviews and ratings of the headphones to make sure that the cheapest option is not a scam."
+Another example could be if the user prompt is "find the cheapest headphones in Amazon". Even though you found the cheapest headphones available, you want to make sure if it not a scam. Thus, you can enhance the prompt to "find the cheapest headphones in Amazon. Make sure to check the reviews and ratings of the headphones to make sure that the cheapest option is not a scam.".
 
 There should be no world in which the browser agent ends the task before it is fully completed because it takes a long time, task is hard to do, agent wants to ask clarification, or any other reason.
 ________________________________________________________________________________
 
-To summarize, you want to enhance the user’s prompt so that the browser agent executes the user’s will in a more thorough and thoughtful way. You have the ability to generate the prompt to give to the browser agent, so you have very high responsibility. You MUST think into depth what the user wants to achieve and how a thorough and thoughtful person would execute the task if that person had to manually perform it, and enhance the user prompt so that the browser agent also performs the task in that manner. Assume that the browser agent will not be as thorough unless you explicitly mention the steps to take and the things to consider.
+To summarize, you want to enhance the user's prompt so that the browser agent executes the user's will in a more thorough and thoughtful way. You have the ability to generate the prompt to give to the browser agent, so you have very high responsibility. You MUST think into depth what the user wants to achieve and how a thorough and thoughtful person would execute the task if that person had to manually perform it, and enhance the user prompt so that the browser agent also performs the task in that manner. Assume that the browser agent will not be as thorough unless you explicitly mention the steps to take and the things to consider.
 
 Do NOT overwrite the user prompt. It is not required to make use of search history and web search results if it does not make sense to do so.
 
@@ -925,8 +925,11 @@ let secureIPCClient = null;
 if (SECURE_IPC_SOCKET) {
   secureIPCClient = new SecureIPCClient(SECURE_IPC_SOCKET);
   
-  // Set up token rotation handler
+  // Disable token rotation handling per configuration: do not rotate secure tokens
   secureIPCClient.onTokenRotation((browserInstanceId, newToken) => {
+    console.log('[TokenRotation] Disabled: ignoring token rotation event');
+    return; // no-op
+    /*
     console.log(`[TokenRotation] STALENESS-4: Received new token for browser ${browserInstanceId}`);
     console.log(`[TokenRotation] STALENESS-4: Callback invoked at ${new Date().toISOString()}`);
     console.log(`[TokenRotation] STALENESS-4: New token length: ${newToken ? newToken.length : 'UNDEFINED'}`);
@@ -944,7 +947,7 @@ if (SECURE_IPC_SOCKET) {
         token: newToken,
         cdp_url: newCdpUrl,
         updated_at: new Date(),
-        expiry: new Date(Date.now() + 60000) // Refresh expiry to 1 minute from now during token rotation
+        expiry: null // no expiry tracking
       });
       
       console.log(`[TokenRotation] Updated connection for browser ${browserInstanceId}`);
@@ -963,13 +966,13 @@ if (SECURE_IPC_SOCKET) {
       const reconstructedConnection = {
         port: 9222, // Standard Chrome CDP port
         token: newToken,
-        expiry: new Date(Date.now() + 60000), // 1 minute expiry (matches C++ token validity)
+        expiry: null,
         cdp_url: newCdpUrl,
         registered_at: new Date(),
         updated_at: new Date(),
         mode: 'token_rotation_recovery',
         protocol_version: '1.0',
-        capabilities: ['encrypted_communication', 'token_rotation']
+        capabilities: ['encrypted_communication']
       };
       
       browserConnections.set(browserInstanceId, reconstructedConnection);
@@ -978,7 +981,7 @@ if (SECURE_IPC_SOCKET) {
       console.log(`[TokenRotation] RECOVERY: Connection map now has ${browserConnections.size} entries`);
       console.log(`[TokenRotation] RECOVERY: Browser will be available for new tasks`);
     }
-  });
+  */});
   
   // Connect to secure IPC server
   console.log('[SecureIPC] STALENESS-1: Initiating connection to secure IPC server');
@@ -1119,40 +1122,7 @@ async function getSecureBrowserConnection(browserInstanceId) {
     throw new Error(`Browser instance ${browserInstanceId} not registered`);
   }
   
-  // Check if token is expired
-  if (new Date() > connectionInfo.expiry) {
-    browserConnections.delete(browserInstanceId);
-    metrics.security.expired_tokens++;
-    throw new Error(`Browser token expired for instance ${browserInstanceId}`);
-  }
-  
-  // Check if token is too old (more than 30 seconds since registration or last update)
-  const now = new Date();
-  const tokenAge = connectionInfo.updated_at ? 
-    (now - connectionInfo.updated_at) : 
-    (now - connectionInfo.registered_at);
-  
-  console.log(`[Security] STALENESS-2: Token age check for ${browserInstanceId}`);
-  console.log(`[Security] STALENESS-2: Current time: ${now.toISOString()}`);
-  console.log(`[Security] STALENESS-2: Registered at: ${connectionInfo.registered_at ? connectionInfo.registered_at.toISOString() : 'UNDEFINED'}`);
-  console.log(`[Security] STALENESS-2: Last updated: ${connectionInfo.updated_at ? connectionInfo.updated_at.toISOString() : 'NEVER'}`);
-  console.log(`[Security] STALENESS-2: Calculated token age: ${Math.round(tokenAge/1000)}s`);
-  console.log(`[Security] STALENESS-2: Using timestamp: ${connectionInfo.updated_at ? 'updated_at' : 'registered_at'}`);
-  
-  if (tokenAge > 30000) { // 30 seconds
-    console.warn(`[Security] Token for ${browserInstanceId} is ${Math.round(tokenAge/1000)}s old, may be stale`);
-    console.warn(`[Security] Consider requesting fresh token if connection fails`);
-    console.warn(`[Security] STALENESS-2: TOKEN IS STALE - connection may fail`);
-    console.warn(`[Security] STALENESS-2: Stale token details:`, {
-      browserInstanceId,
-      tokenAge: Math.round(tokenAge/1000) + 's',
-      registeredAt: connectionInfo.registered_at,
-      lastUpdated: connectionInfo.updated_at,
-      port: connectionInfo.port
-    });
-  } else {
-    console.log(`[Security] STALENESS-2: Token is fresh (${Math.round(tokenAge/1000)}s old)`);
-  }
+  // Disable expiry/staleness enforcement; assume connection is valid as long as it exists
   
   return connectionInfo;
 }
@@ -1648,7 +1618,7 @@ app.post('/register-browser', (req, res) => {
   browserConnections.set(browser_instance_id, {
     port: cdp_port,
     token: cdp_token,
-    expiry: new Date(token_expiry),
+    expiry: null,
     cdp_url: `http://localhost:${cdp_port}?token=${cdp_token}`,
     registered_at: new Date(),
     updated_at: new Date(),  // Track token updates
@@ -2142,7 +2112,27 @@ app.post('/mcp/execute', async (req, res) => {
               taskQueue.addEvent('status', 'planning_query:');
             }
           } catch (_) {}
-          const braveSources = await braveSearchTop(webQuery || task, { count: 8, timeoutMs: 3000 });
+          const braveSources = await braveSearchTop(webQuery || task, { count: 12, timeoutMs: 3000 });
+          try {
+            // Emit top 12 deduped sources for planning UI (domain-deduped)
+            const top = [];
+            const seen = new Set();
+            for (const s of Array.isArray(braveSources) ? braveSources : []) {
+              try {
+                const urlStr = (s && typeof s.url === 'string') ? s.url : '';
+                if (!urlStr) continue;
+                const u = new URL(urlStr);
+                const domain = (u.hostname || '').replace(/^www\./, '');
+                if (!domain || seen.has(domain)) continue;
+                seen.add(domain);
+                top.push({ url: urlStr, domain });
+                if (top.length >= 12) break;
+              } catch (_) {}
+            }
+            if (top.length) {
+              taskQueue.addEvent('planning_sources', JSON.stringify(top));
+            }
+          } catch (_) {}
           enhancedPrompt = await synthesizeEnhancedPrompt({ task, searchHistory: search_history, braveSources, webQuery });
           console.log(`[EnhancePrompt] Task ${taskId}: enhancedPrompt chars=${enhancedPrompt.length}`);
         } catch (e) {
@@ -2408,15 +2398,19 @@ app.post('/mcp/execute', async (req, res) => {
       restoreConsole();
       
       // Check if this is a stop-related error
-      if (error.message && error.message.includes('Target page, context or browser has been closed')) {
-        console.log(`Task ${taskId} was stopped by user`);
-        taskQueue.addEvent('task_stopped', 'Task stopped by user');
+      if (error && typeof error.message === 'string' &&
+          (error.message.includes('Target page, context or browser has been closed') ||
+           error.message.includes('Target page has been closed') ||
+           error.message.includes('Execution context was destroyed') ||
+           error.message.includes('Protocol error') && error.message.includes('Target closed'))) {
+        console.log(`Task ${taskId} stopped due to target closure (treating as stop)`);
+        taskQueue.addEvent('task_stopped', 'Task stopped');
         
         // Store stopped status
         if (browserAgents.has(taskId)) {
           const agentData = browserAgents.get(taskId);
           agentData.status = 'stopped';
-          agentData.message = 'Task stopped by user';
+          agentData.message = 'Task stopped';
         }
         // Ensure cursor overlay is removed on stop
         try {
@@ -2435,28 +2429,12 @@ app.post('/mcp/execute', async (req, res) => {
         
         // Check if this is a token-related error
         if (error.message.includes('Unexpected status 500') || 
-            error.message.includes('token') || 
             error.message.includes('hard expiry')) {
           
           console.log(`[TokenFailure] Detected token-related error for task ${taskId}`);
           
           // In static-token mode, preserve registration; otherwise cleanup stale connections
-          const rotationDisabled = process.env.DISABLE_CDP_TOKEN_ROTATION !== 'false';
-          if (!rotationDisabled) {
-            // Find and clean up stale browser connections
-            for (const [browserId, connectionInfo] of browserConnections) {
-              const tokenAge = connectionInfo.updated_at ? 
-                (new Date() - connectionInfo.updated_at) : 
-                (new Date() - connectionInfo.registered_at);
-              
-              if (tokenAge > 30000) { // Remove tokens older than 30 seconds
-                console.log(`[TokenFailure] Removing stale connection for browser ${browserId} (age: ${Math.round(tokenAge/1000)}s)`);
-                browserConnections.delete(browserId);
-              }
-            }
-          } else {
-            console.log('[TokenFailure] Rotation disabled - preserving existing browser registrations');
-          }
+          console.log('[TokenFailure] Static-token mode: preserving existing browser registrations (no rotation, no staleness cleanup)');
         }
         
         // Store error status
