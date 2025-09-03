@@ -2493,17 +2493,12 @@ app.post('/mcp/cleanup/:taskId', async (req, res) => {
       
       // Do not summarize on stop; only summarize on successful completion
       
-      // Try to stop gracefully if stop method exists
+      // Try to stop gracefully if stop method exists (preferred); leave page/tab open for user
       if (agent && typeof agent.stop === 'function') {
-        await agent.stop();
+        try { await agent.stop(); } catch (e) { console.log(`agent.stop() failed: ${e && e.message ? e.message : e}`); }
       } else if (agent && agent.page) {
-        // If no stop method, just close the page
-        try {
-          await agent.page.close();
-        } catch (closeError) {
-          // Page might already be closed
-          console.log(`Page already closed for task ${taskId}`);
-        }
+        // Fallback: if no stop method, close the page to halt automation
+        try { await agent.page.close(); } catch (_) { console.log(`Page already closed for task ${taskId}`); }
       }
       
       browserAgents.delete(taskId);
