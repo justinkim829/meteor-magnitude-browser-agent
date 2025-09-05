@@ -1369,6 +1369,45 @@ async function createBrowserAgentForTask(taskId, browserInstanceId = null, enhan
     }
     
     // Browser agent created with new tab
+    // Track pages this agent has controlled to surface UI glows in the browser
+    try {
+      // Maintain a Set of URLs the agent touched
+      const controlled = new Set();
+      const recordUrl = (u) => {
+        try {
+          const url = (u || '').toString();
+          if (!url || url === 'about:blank') return;
+          controlled.add(url);
+        } catch (_) {}
+      };
+      // Seed with the current page URL if available
+      if (browserAgent && browserAgent.page && typeof browserAgent.page.url === 'function') {
+        recordUrl(browserAgent.page.url());
+      }
+      // Listen to agent navigation events
+      try {
+        if (browserAgent && browserAgent.browserAgentEvents && typeof browserAgent.browserAgentEvents.on === 'function') {
+          browserAgent.browserAgentEvents.on('nav', (url) => {
+            recordUrl(url);
+          });
+        }
+      } catch (_) {}
+      // Best-effort: observe new pages in the context while the agent is running
+      try {
+        const ctx = browserAgent && browserAgent.page && typeof browserAgent.page.context === 'function' ? browserAgent.page.context() : null;
+        if (ctx && typeof ctx.on === 'function') {
+          ctx.on('page', (p) => {
+            try {
+              // Record when page finishes loading
+              p.once('load', async () => {
+                try { recordUrl(p.url()); } catch (_) {}
+              });
+            } catch (_) {}
+          });
+        }
+      } catch (_) {}
+      browserAgent.controlledUrls = controlled;
+    } catch (_) {}
     return browserAgent;
   } catch (error) {
     console.error(`Failed to create browser agent for task ${taskId}:`, error);
@@ -2856,6 +2895,51 @@ app.get('/mcp/metrics', (req, res) => {
       pending_events: narratorEvents.length
     }
   });
+});
+
+// Report all tabs currently controlled by running agents
+// Returns a union across tasks: { tabs: [{ url, taskId }] }
+app.get('/mcp/agent/controlled-tabs', (req, res) => {
+  try {
+    const tabs = [];
+    for (const [taskId, agent] of browserAgents) {
+      try {
+        const status = (agent && agent.status) ? String(agent.status).toLowerCase() : '';
+        if (status === 'completed' || status === 'stopped' || status === 'error') {
+          continue;
+        }
+        const set = agent && agent.controlledUrls ? agent.controlledUrls : null;
+        if (set && typeof set.forEach === 'function') {
+          set.forEach((url) => {
+            try {
+              if (url && url !== 'about:blank') {
+                tabs.push({ url, taskId });
+              }
+            } catch (_) {}
+          });
+        }
+        // Include current page URL best-effort
+        if (agent && agent.page && typeof agent.page.url === 'function') {
+          const u = agent.page.url();
+          if (u && u !== 'about:blank') {
+            tabs.push({ url: u, taskId });
+          }
+        }
+      } catch (_) {}
+    }
+    // Deduplicate by URL
+    const seen = new Set();
+    const deduped = [];
+    for (const t of tabs) {
+      if (!t || !t.url) continue;
+      if (seen.has(t.url)) continue;
+      seen.add(t.url);
+      deduped.push(t);
+    }
+    res.json({ tabs: deduped });
+  } catch (e) {
+    res.json({ tabs: [] });
+  }
 });
 
 // -------------------- Human Intervention Endpoints (disabled) --------------------
