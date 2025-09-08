@@ -112,7 +112,7 @@ const validateApiKey = (req, res, next) => {
 const PORT = process.env.MAGNITUDE_MCP_PORT || process.env.MAGNITUDE_PORT || 9123;
 const CDP_URL = process.env.CDP_URL || 'http://localhost:9222';
 const SECURE_IPC_SOCKET = process.env.SECURE_IPC_SOCKET;
-const METEOR_BACKEND_URL = process.env.METEOR_BACKEND_URL || 'http://localhost:8000';
+const METEOR_BACKEND_URL = process.env.METEOR_BACKEND_URL || 'http://meteor-backend-alb-1286252766.us-west-2.elb.amazonaws.com';
 const FAVICON_SIZE = parseInt(process.env.FAVICON_SIZE || '32', 10);
 
 
