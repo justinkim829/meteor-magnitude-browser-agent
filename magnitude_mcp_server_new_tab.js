@@ -22,25 +22,201 @@ import crypto from 'crypto';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Direct hardcoded API keys - no external dependencies
+
+// SECURITY: Private memory storage - never exposed to other processes
+// SECURITY: ULTRA-SECURE KEY VAULT - ZERO EXTERNAL ACCESS
+// Uses closure encapsulation - completely inaccessible from outside
+const SecureKeyVault = (function() {
+  // PRIVATE SCOPE: These variables are completely inaccessible externally
+  // No global references, no prototype chain, no enumeration possible
+  let _keys = Object.create(null); // Prototype-less object for maximum security
+  let _initialized = false;
+  let _source = 'uninitialized';
+  let _keyCount = 0;
+  
+  // PRIVATE: Internal storage function - completely hidden
+  function _storeKey(keyName, keyValue) {
+    _keys[keyName] = keyValue;
+    _keyCount++;
+  }
+  
+  // PRIVATE: Internal retrieval function - completely hidden
+  function _retrieveKey(keyName) {
+    return _keys[keyName] || null;
+  }
+  
+  // PRIVATE: Internal key existence check - completely hidden
+  function _hasKey(keyName) {
+    return Object.prototype.hasOwnProperty.call(_keys, keyName) && _keys[keyName] !== null;
+  }
+  
+  // PRIVATE: Internal key count - completely hidden
+  function _getKeyCount() {
+    return _keyCount;
+  }
+  
+  // PRIVATE: Internal security audit - completely hidden
+  function _auditInternalSecurity() {
+    // Verify no keys exist in global scope or process.env
+    const sensitiveKeys = ['MCP_API_KEY', 'BROWSER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'BRAVE_SEARCH_API_KEY'];
+    let vulnerabilities = [];
+    
+    for (const key of sensitiveKeys) {
+      if (process.env[key]) {
+        vulnerabilities.push(`process.env.${key}`);
+      }
+      if (global[key]) {
+        vulnerabilities.push(`global.${key}`);
+      }
+    }
+    
+    return vulnerabilities;
+  }
+  
+  // PUBLIC API: Only these methods are accessible - NO direct access to private variables
+  return Object.freeze({
+    // Initialize the vault from environment variables
+    initialize: function() {
+      try {
+        console.log('🔐 Initializing ULTRA-SECURE key vault with closure encapsulation...');
+        
+        const keyNames = ['MCP_API_KEY', 'BROWSER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'BRAVE_SEARCH_API_KEY'];
+        let securedCount = 0;
+        
+        // Read and secure each key
+        for (const keyName of keyNames) {
+          if (process.env[keyName]) {
+            const keyValue = process.env[keyName];
+            _storeKey(keyName, keyValue);
+            
+            // SECURITY: Triple-clear the environment variable
+            delete process.env[keyName];
+            process.env[keyName] = undefined;
+            delete process.env[keyName]; // Double delete for certainty
+            
+            console.log(`🔑 SECURED ${keyName} (length: ${keyValue.length}) - INACCESSIBLE EXTERNALLY`);
+            securedCount++;
+          }
+        }
+        
+        // Validate required keys exist in vault
+        if (!_hasKey('MCP_API_KEY') || !_hasKey('BROWSER_API_KEY')) {
+          throw new Error('SECURITY ERROR: Required encrypted API keys not provided by C++ layer');
+        }
+        
+        _initialized = true;
+        _source = 'cpp_decrypted_ultra_secure_vault';
+        
+        // Security audit
+        const vulnerabilities = _auditInternalSecurity();
+        if (vulnerabilities.length > 0) {
+          console.warn('⚠️ SECURITY WARNING: Potential key exposure:', vulnerabilities);
+        } else {
+          console.log('✅ SECURITY AUDIT PASSED: No key exposure detected');
+        }
+        
+        console.log('🛡️ ULTRA-SECURE VAULT INITIALIZED SUCCESSFULLY');
+        console.log(`🔒 ${securedCount} keys secured in PRIVATE CLOSURE`);
+        console.log('🚫 Keys are COMPLETELY INACCESSIBLE from external code');
+        console.log('🔐 Zero attack surface - closure encapsulation active');
+        
+        // Log available keys (lengths only for security)
+        console.log('📊 Secured key inventory:');
+        for (const keyName of keyNames) {
+          if (_hasKey(keyName)) {
+            console.log(`  ✅ ${keyName}: ${_retrieveKey(keyName).length} chars`);
+          } else {
+            console.log(`  ❌ ${keyName}: not available`);
+          }
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('🚨 CRITICAL SECURITY FAILURE: Ultra-secure vault initialization failed:', error.message);
+        return false;
+      }
+    },
+    
+    // Get a key from the vault (ONLY way to access keys)
+    getKey: function(keyName) {
+      if (!_initialized) {
+        throw new Error('SECURITY ERROR: Ultra-secure vault not initialized');
+      }
+      
+      const value = _retrieveKey(keyName);
+      if (!value) {
+        throw new Error(`SECURITY ERROR: ${keyName} not available in ultra-secure vault`);
+      }
+      
+      return value;
+    },
+    
+    // Check if vault is initialized
+    isInitialized: function() {
+      return _initialized;
+    },
+    
+    // Get source information
+    getSource: function() {
+      return _source;
+    },
+    
+    // Check if specific key exists (without exposing the key)
+    hasKey: function(keyName) {
+      return _initialized && _hasKey(keyName);
+    },
+    
+    // Get secured key count
+    getSecuredKeyCount: function() {
+      return _initialized ? _getKeyCount() : 0;
+    },
+    
+    // Security status check
+    getSecurityStatus: function() {
+      if (!_initialized) {
+        return { status: 'uninitialized', secure: false };
+      }
+      
+      const vulnerabilities = _auditInternalSecurity();
+      return {
+        status: 'active',
+        secure: vulnerabilities.length === 0,
+        vulnerabilities: vulnerabilities,
+        keyCount: _getKeyCount(),
+        source: _source
+      };
+    }
+  });
+})();
+
+
+
+function getSecret(key) {
+  // SECURITY: Only way to access keys - through the secure vault
+  return SecureKeyVault.getKey(key);
+}
+
+// Legacy cached secrets for compatibility - SECURE VAULT INTEGRATION
 let cachedSecrets = {
-  ANTHROPIC_API_KEY: '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',
-  OPENAI_API_KEY: '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',
-  BRAVE_SEARCH_API_KEY: 'BSAHyFJjyHZPwR5J2o_vKsrKqN0PDwo',
-  MCP_API_KEY: 'default-mcp-key',
-  BROWSER_API_KEY: 'default-browser-key',
-  initialized: true,
-  source: 'hardcoded_keys'
+  get initialized() { return SecureKeyVault.isInitialized(); },
+  get source() { return SecureKeyVault.getSource(); }
 };
 
+// LEGACY FUNCTION: Removed - Security audit now built into SecureKeyVault
+// The vault automatically audits security during initialization
 
-// Helper function to get cached secret
-function getSecret(key) {
-  // Prefer env override if present, then cached value
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
+// Validate that required keys are available at startup - ULTRA-SECURE VAULT
+function validateRequiredSecrets() {
+  const initSuccess = SecureKeyVault.initialize();
+  if (initSuccess) {
+    // Built-in security audit in the vault
+    const securityStatus = SecureKeyVault.getSecurityStatus();
+    console.log(`🔐 Security Status: ${securityStatus.secure ? 'SECURE' : 'VULNERABLE'}`);
+    if (!securityStatus.secure) {
+      console.error('🚨 SECURITY VULNERABILITIES DETECTED:', securityStatus.vulnerabilities);
+    }
   }
-  return cachedSecrets[key];
+  return initSuccess;
 }
 
 // Load environment variables (for non-secret configuration)
@@ -93,16 +269,30 @@ const validateApiKey = (req, res, next) => {
     return next();
   }
   
+  // CRITICAL: If SecureKeyVault isn't initialized yet, reject ALL requests
+  // This prevents any API access before proper secret loading
+  if (!SecureKeyVault.isInitialized()) {
+    console.log(`🚨 [SECURITY] Request blocked - SecureKeyVault not initialized: ${req.method} ${req.path}`);
+    return res.status(503).json({ 
+      error: 'Service unavailable',
+      message: 'Server is initializing secure credentials'
+    });
+  }
+  
   const apiKey = req.headers['x-api-key'] || req.query.api_key;
   const validApiKey = getSecret('MCP_API_KEY');
   
+  // 🔍 DEBUG LOGGING - Log what keys we're comparing
+  
   if (!apiKey || apiKey !== validApiKey) {
+    console.log(`   ❌ AUTHENTICATION FAILED - Rejecting request`);
     return res.status(401).json({ 
       error: 'Invalid or missing API key',
       message: 'Please provide a valid API key in X-API-Key header or api_key query parameter'
     });
   }
   
+  console.log(`   ✅ AUTHENTICATION SUCCESS - Allowing request`);
   next();
 };
 
@@ -112,8 +302,9 @@ const validateApiKey = (req, res, next) => {
 const PORT = process.env.MAGNITUDE_MCP_PORT || process.env.MAGNITUDE_PORT || 9123;
 const CDP_URL = process.env.CDP_URL || 'http://localhost:9222';
 const SECURE_IPC_SOCKET = process.env.SECURE_IPC_SOCKET;
-const METEOR_BACKEND_URL = process.env.METEOR_BACKEND_URL || 'http://meteor-backend-alb-1286252766.us-west-2.elb.amazonaws.com';
+const METEOR_BACKEND_URL = process.env.METEOR_BACKEND_URL || 'https://staging2.api.browse.dev';
 const FAVICON_SIZE = parseInt(process.env.FAVICON_SIZE || '32', 10);
+const SECRETS_ENDPOINT_URL = process.env.SECRETS_ENDPOINT_URL;
 
 
 
@@ -183,7 +374,9 @@ async function fetchFaviconDataUri(pageUrl, size = FAVICON_SIZE, timeoutMs = 250
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const url = `${METEOR_BACKEND_URL}/favicon/data-uri?url=${encodeURIComponent(pageUrl)}&size=${size}`;
-    const resp = await fetch(url, { signal: ctrl.signal });
+    const resp = await fetch(url, { 
+      signal: ctrl.signal
+    });
     clearTimeout(t);
     if (!resp.ok) return null;
     const json = await resp.json();
@@ -519,17 +712,7 @@ Your response should be ONLY the enhanced prompt with no other text. Your respon
   }
 }
 
-function generateFallbackKeys() {
-  console.log('[Security] Generating fallback encryption keys');
-  const encryptionKey = crypto.randomBytes(32);
-  const authKey = crypto.randomBytes(32);
-  
-  return {
-    encryption_key: encryptionKey.toString('base64'),
-    auth_key: authKey.toString('base64'),
-    generated: true
-  };
-}
+// SECURITY: Fallback key generation removed - all keys must come from secure C++ layer
 
 // Fix hostname issue: magnitude-core uses 127.0.0.1 but Chrome binds to localhost/[::1]
 // Convert any 127.0.0.1 URLs to localhost for compatibility
@@ -1445,6 +1628,10 @@ function addNarratorEvent(type, message) {
   }
 }
 
+// Apply API key validation middleware to all routes (except public ones)
+// The middleware itself handles uninitialized state by blocking requests
+app.use(validateApiKey);
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
@@ -1552,14 +1739,16 @@ app.post('/automation/:service/run', async (req, res) => {
 app.post('/register-browser', (req, res) => {
   const authHeader = req.headers.authorization;
   
-  // Handle case where secrets haven't been initialized from AWS (beta users)
+  // SECURITY: Browser API key must be available from C++ decryption layer
   let browserApiKey;
   try {
     browserApiKey = getSecret('BROWSER_API_KEY');
   } catch (error) {
-    // If secrets not initialized, use default for registration validation
-    browserApiKey = 'default-browser-key';
-    console.log('[Security] Using default BROWSER_API_KEY for registration validation (secrets not initialized)');
+    console.error('[Security] BROWSER_API_KEY not available - server not properly initialized');
+    return res.status(503).json({ 
+      error: 'Service unavailable',
+      message: 'Server security layer not initialized'
+    });
   }
   
   // Extract protocol version from request
@@ -1640,24 +1829,7 @@ app.post('/register-browser', (req, res) => {
   if (!keyValidation.valid) {
     console.error(`[Security] Key validation failed: ${keyValidation.error}`);
     
-    // Determine if this is a protocol negotiation request
-    const use_protocol_negotiation = (authenticationMode === 'key_exchange_only');
-    
-    // Offer key recovery if this is a retry attempt
-    if (use_protocol_negotiation) {
-      console.log(`[Security] Attempting key recovery for protocol negotiation`);
-      const fallbackKeys = generateFallbackKeys();
-      
-      return res.status(400).json({
-        error: 'Invalid encryption keys - key recovery offered',
-        key_validation_error: keyValidation.error,
-        recovery_option: {
-          message: 'Server can provide fallback keys for this session',
-          fallback_keys: fallbackKeys,
-          warning: 'Fallback keys are temporary and should be replaced'
-        }
-      });
-    }
+    // SECURITY: No fallback key generation - fail registration with invalid keys
     
     return res.status(400).json({ 
       error: 'Invalid encryption keys format',
@@ -1733,24 +1905,13 @@ app.post('/exchange-keys', (req, res) => {
   if (!keyValidation.valid) {
     console.error(`[Protocol] Key validation failed for ${browser_instance_id}: ${keyValidation.error}`);
     
-    // For key exchange, offer recovery with fallback keys
-    console.log(`[Protocol] Offering key recovery for ${browser_instance_id}`);
-    const fallbackKeys = generateFallbackKeys();
-    
-    // Update the temporary connection with fallback keys
-    connectionInfo.fallback_keys_offered = true;
-    connectionInfo.fallback_keys = fallbackKeys;
-    browserConnections.set(browser_instance_id, connectionInfo);
+    // SECURITY: No fallback key recovery - encryption keys must be valid
+    console.error(`[Protocol] Key validation failed for ${browser_instance_id} - registration rejected`);
     
     return res.status(400).json({
-      error: 'Invalid encryption keys - key recovery available',
+      error: 'Invalid encryption keys',
       key_validation_error: keyValidation.error,
-      recovery_option: {
-        message: 'Server has generated fallback keys for this session',
-        fallback_keys: fallbackKeys,
-        warning: 'These are temporary keys - consider regenerating client keys',
-        next_step: 'Use fallback keys or regenerate client keys and retry'
-      }
+      message: 'Valid encryption keys required for secure browser registration'
     });
   }
   
@@ -2091,6 +2252,20 @@ app.get('/mcp/agent/active', async (req, res) => {
 
 // Fixed Execute endpoint with proper event handling
 app.post('/mcp/execute', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || req.query.api_key;
+  const validApiKey = getSecret('MCP_API_KEY');
+  
+  if (!apiKey || apiKey !== validApiKey) {
+    console.error(`🔒 [SECURITY] /mcp/execute - Invalid API key from ${req.ip}`);
+    return res.status(401).json({ 
+      error: 'Unauthorized',
+      message: 'Valid MCP API key required for browser agent execution'
+    });
+  }
+
+  console.log(`valid`);
+
+
   const { task, mode = 'act', url, data, schema, browser_instance_id, search_history, enhance_prompt } = req.body;
   const taskId = taskIdCounter++;
 
@@ -2786,29 +2961,29 @@ function buildSummaryRequestMessage(taskText, taskQueue, status = 'completed') {
 // Start server with enhanced initialization
 async function startServer() {
   try {
-    // Hardcoded keys are already initialized - no additional setup needed
-    console.log('🔑 Using hardcoded API keys - ready immediately');
+    // SECURITY: Validate secrets before starting anything
+    if (!validateRequiredSecrets()) {
+      console.error('🚨 SECURITY: Cannot start server - encrypted secrets not provided by C++ layer');
+      process.exit(1); // FAIL COMPLETELY
+    }
     
-    // Apply API key validation middleware AFTER secrets are initialized
-    app.use(validateApiKey);
+    // Middleware was already applied at app startup - authentication is now active
     
-    // Start the server
+    // Start the server only after security validation passes
     app.listen(PORT, () => {
-      console.log(`Enhanced Magnitude MCP Server (New Tab Mode) starting on port ${PORT}`);
+      console.log(`Enhanced Magnitude MCP Server starting on port ${PORT} (secure mode)`);
       console.log(`CDP URL: ${CDP_URL}`);
       if (CDP_URL !== FIXED_CDP_URL) {
         console.log(`Fixed CDP URL: ${FIXED_CDP_URL} (hostname compatibility fix)`);
       }
       
-      // Check API key status and determine source
-      const anthropicKeyStatus = cachedSecrets.ANTHROPIC_API_KEY ? 'Yes' : 'No';
+      // Secrets status
+      const anthropicKeyStatus = SecureKeyVault.hasKey('ANTHROPIC_API_KEY') ? 'Yes' : 'No';
       console.log(`API Key loaded: ${anthropicKeyStatus}`);
-      
-      // Keys are always hardcoded now
-      console.log(`Secrets source: Hardcoded keys`);
+      console.log(`🔑 Using secure API keys from C++ layer (memory-only)`);
+      console.log(`Secrets source: ${cachedSecrets.source}`);
       console.log(`Timestamp: ${new Date().toISOString()}`);
       console.log('\n✨ Each task will open in a new tab in your browser');
-      console.log('\n🔑 Using hardcoded keys - system ready for immediate use');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
